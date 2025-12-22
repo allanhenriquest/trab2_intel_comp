@@ -31,13 +31,13 @@ DENOMS=(10 100 1000)
 METRIC=1
 
 # Cria uma pasta para organizar os outputs
-mkdir -p instancias_MED
+mkdir -p ../instancias_MED
 
 # 3. Loop para gerar todas as 18 combinações
 for S in "${SIZES[@]}"; do
     for D in "${DENOMS[@]}"; do
         # Define o nome do arquivo no padrão X-Y (Ex: 500-10)
-        FILENAME="instancias_MED/${S}-${D}.txt"
+        FILENAME="../instancias_MED/${S}-${D}.txt"
         
         echo "Gerando instância: Tamanho $S, Esquema $D -> $FILENAME"
         
