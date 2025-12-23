@@ -9,11 +9,11 @@ using namespace std;
 class Evaluator {
 public:
     // Compute total cost from scratch; fills assignments and costs.
-    void evaluateFull(const Instance& inst, Solution& sol) const;
+    static void evaluateFull(const Instance& inst, Solution& sol);
 
     // Open facility k; update assignments and total cost in O(n).
-    void openFacility(int k, const Instance& inst, Solution& sol) const;
+    static void openFacility(int k, const Instance& inst, Solution& sol);
 
     // Close facility k; reassign affected clients and update total cost in O(n).
-    void closeFacility(int k, const Instance& inst, Solution& sol) const;
+    static void closeFacility(int k, const Instance& inst, Solution& sol);
 };

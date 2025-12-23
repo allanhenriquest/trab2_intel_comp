@@ -12,16 +12,10 @@ using namespace std;
 // - allocation_costs: n x n matrix of serving costs
 class Instance {
 public:
-    int n{0};
-    vector<double> opening_costs;           
+    string filePath;
+    int n;
+    double opening_cost;       
     vector<vector<double>> allocation_costs; 
-
-    // Construct an empty instance.
-    Instance() = default;
-
-    // Construct with size; opening costs set to 0, allocation costs to 0.
-    Instance(int n_);
-
-    // Validate basic consistency (square matrix n x n). Throws on error.
-    void validate() const;
+    
+    Instance(const string filePath, bool verbose = false);
 };

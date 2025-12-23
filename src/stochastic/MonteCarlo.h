@@ -11,5 +11,6 @@ class MonteCarlo {
 public:
     // Estimate the expected total cost via 'samples' random scenarios.
     // Note: scenario generation details TBD; this is a placeholder signature.
-    double expectedCost(const Instance& inst, const Solution& sol, int samples) const;
+    static double expectedCost(const Instance& inst, const Solution& sol, 
+        const Solution& best_deter_sol, int samples, int k);
 };

@@ -7,7 +7,7 @@ bool Writer::writeSolution(const string& path, const Solution& sol) const {
     ofstream out(path);
     if (!out) return false;
     out << "total_cost," << sol.total_cost << "\n";
-    out << "open_count," << count(sol.y.begin(), sol.y.end(), true) << "\n";
+    out << "open_count," << count(sol.openFacilities.begin(), sol.openFacilities.end(), true) << "\n";
     return true;
 }
 

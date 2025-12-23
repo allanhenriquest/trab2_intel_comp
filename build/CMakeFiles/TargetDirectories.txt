@@ -1,3 +1,0 @@
-/home/filip/c++Projects/trab2_intel_comp/build/CMakeFiles/uflp.dir
-/home/filip/c++Projects/trab2_intel_comp/build/CMakeFiles/edit_cache.dir
-/home/filip/c++Projects/trab2_intel_comp/build/CMakeFiles/rebuild_cache.dir
