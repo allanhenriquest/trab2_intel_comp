@@ -1,5 +1,5 @@
 #include "MonteCarlo.h"
-#include "Random.h"
+#include "util/Random.h"
 #include <limits>
 
 using namespace std;

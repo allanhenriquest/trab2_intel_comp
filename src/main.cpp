@@ -1,7 +1,7 @@
 #include <iostream>
 #include <string>
 
-#include "core/Instance.h"
+#include "io/Instance.h"
 
 using namespace std;
 

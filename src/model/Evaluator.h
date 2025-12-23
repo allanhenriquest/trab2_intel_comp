@@ -1,6 +1,6 @@
 #pragma once
 
-#include "core/Instance.h"
+#include "io/Instance.h"
 #include "model/Solution.h"
 
 using namespace std;
