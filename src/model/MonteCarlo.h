@@ -12,5 +12,5 @@ public:
     // Estimate the expected total cost via 'samples' random scenarios.
     // Note: scenario generation details TBD; this is a placeholder signature.
     static double expectedCost(const Instance& inst, const Solution& sol, 
-        const Solution& best_deter_sol, int samples, int k);
+        const Solution& best_deter_sol, int samples, int k, unsigned long long seed);
 };

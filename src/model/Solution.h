@@ -13,6 +13,7 @@ struct Solution {
     vector<bool> openFacilities; // size n
     vector<pair<int, double>> assigned_facility; // size n
     double total_cost;
+    unsigned long long seed{42};
 
     Solution(int n);
 

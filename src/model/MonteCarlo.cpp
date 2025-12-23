@@ -5,7 +5,7 @@
 using namespace std;
 
 double MonteCarlo::expectedCost(const Instance& inst, const Solution& sol, 
-    const Solution& best_deter_sol, int samples, int k) {
+    const Solution& best_deter_sol, int samples, int k, unsigned long long seed) {
     if (samples <= 0) return sol.total_cost;
 
     const int n = inst.n;
@@ -28,7 +28,7 @@ double MonteCarlo::expectedCost(const Instance& inst, const Solution& sol,
 
     const double EPS = 1e-12; // avoid zero means in lognormal
 
-    Random rng(123456789ULL);
+    Random rng(seed);
     double total = 0.0;
     for (int s = 0; s < samples; ++s) {
         double scenario = fixed_opening;

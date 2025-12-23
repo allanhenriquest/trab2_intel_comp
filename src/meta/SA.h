@@ -12,7 +12,7 @@ struct SAParams {
     double alpha{0.95};
     int iters_per_T{1000};
     double Tmin{1e-3};
-    unsigned long long seed{123};
+    unsigned long long seed{42};
 };
 
 // Simulated Annealing for the stochastic refinement phase.
