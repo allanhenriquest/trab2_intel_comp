@@ -14,7 +14,9 @@ class Solver
 {
 public:
 
-    static Solution solveInstance(const Instance& instance, const GAParams& ga_params,
+    static Solution solveInstance(const string& instance_path, const GAParams& ga_params,
+        const SAParams& sa_params, int mc_samples, int mc_k);
+    static void solveAllInDirectory(const string& dir_path, const GAParams& ga_params,
         const SAParams& sa_params, int mc_samples, int mc_k);
     
 private:

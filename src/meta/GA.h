@@ -19,17 +19,19 @@ struct GAParams {
 // Genetic Algorithm for deterministic phase (chromosome = y vector).
 class GA {
 public:
-    explicit GA(GAParams params);
+    explicit GA(GAParams params, Instance instance);
 
     // Run GA and return top-k elite solutions evaluated deterministically.
-    std::vector<Solution> run(const Instance& inst, int elite_k_override = -1);
+    vector<Solution> run(const Instance& inst, int elite_k_override = -1);
 
 private:
     GAParams params_;
+    Instance instance_;
+    vector<Solution> population;
 
-    // Internal helpers (signatures only; implementations are placeholders).
-    void initializePopulation(const Instance& inst);
-    void evaluatePopulation(const Instance& inst);
-    void nextGeneration(const Instance& inst);
-    std::vector<Solution> selectElite(int k) const;
+    // Internal helpers
+    void initializePopulation();
+    void evaluatePopulation();
+    void nextGeneration();
+    vector<Solution> selectElite(int k) const;
 };
