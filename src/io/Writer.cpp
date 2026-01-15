@@ -30,7 +30,8 @@ string Writer::solToString(const Solution& sol) {
     ss << "Total Cost: " << fixed << setprecision(2) << sol.total_cost << "\n";
     ss << "Open Facilities (" << sol.openFacilities.size() << " total):\n";
     for (size_t i = 0; i < sol.openFacilities.size(); ++i) {
-        if (sol.openFacilities[i]) ss << i << " ";
+        if (sol.openFacilities[i]) 
+            ss << i << " ";
     }
     ss << "\n";
     return ss.str();
@@ -48,4 +49,26 @@ bool Writer::appendCSV(const string& csv_path, const string& header_if_new, cons
     
     out << row << "\n";
     return true;
+}
+
+void Writer::cleanUpDirectory(const string& baseDir) {
+    try {
+        if (fs::exists(baseDir)) {
+            for (const auto& entry : fs::directory_iterator(baseDir)) {
+                fs::remove_all(entry.path());
+            }
+        }
+    } catch (const exception& e) {
+        cerr << "Error cleaning up directory " << baseDir << ": " << e.what() << endl;
+    }
+}
+
+void Writer::cleanUpFile(const string& filePath) {
+    try {
+        if (fs::exists(filePath)) {
+            fs::remove(filePath);
+        }
+    } catch (const exception& e) {
+        cerr << "Error deleting file " << filePath << ": " << e.what() << endl;
+    }
 }

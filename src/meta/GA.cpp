@@ -35,7 +35,7 @@ pair<vector<Solution>, RunMetrics> GA::run(const Instance& inst, int elite_k_ove
     });
 
     for (int gen = 0; gen < params_.max_generations; ++gen) {
-        RunMetrics::Generation gm;
+        Generation gm;
         gm.generation_index = gen;
         Timer gen_timer; 
         gen_timer.start();
@@ -135,23 +135,24 @@ void GA::evaluatePopulation() {
     }
 }
 
-void GA::nextGeneration(RunMetrics::Generation& current_metrics) { 
+void GA::nextGeneration(Generation& current_metrics) { 
     Timer evo_timer; evo_timer.start();
 
     vector<Solution> nextPop;
     int elites = params_.elite_k;
     
     // Elitism
-    for (int i = 0; i < elites; ++i) nextPop.push_back(population[i]);
+    nextPop.reserve(params_.pop_size);
+    nextPop.insert(nextPop.end(), population.begin(), population.begin() + elites);
 
     int needed = params_.pop_size - elites;
-    vector<Solution> offspring(needed, Solution(instance_.n, instance_.m));
+    vector<Solution> clie(needed, Solution(instance_.n, instance_.m));
     
     uniform_int_distribution<int> distIdx(0, params_.pop_size - 1);
     uniform_int_distribution<int> distN(0, instance_.n - 1);
     uniform_real_distribution<double> dist01(0.0, 1.0);
 
-    // SERIAL PART: Selection & Mutation (Safe to use global rng)
+    // SERIAL PART: Selection & Mutation
     for(int i=0; i<needed; ++i) {
         // Tournament Selection
         const Solution& p1 = population[distIdx(rng)];
@@ -164,7 +165,7 @@ void GA::nextGeneration(RunMetrics::Generation& current_metrics) {
 
         // Uniform Crossover
         for(int j=0; j<instance_.n; ++j) {
-            offspring[i].openFacilities[j] = (dist01(rng) < 0.5) ? parent1.openFacilities[j] : parent2.openFacilities[j];
+            clie[i].openFacilities[j] = (dist01(rng) < 0.5) ? parent1.openFacilities[j] : parent2.openFacilities[j];
         }
         
         // Mutation (Flip & Swap)
@@ -172,12 +173,12 @@ void GA::nextGeneration(RunMetrics::Generation& current_metrics) {
             if (dist01(rng) < 0.5) {
                 // Flip
                 int idx = distN(rng);
-                offspring[i].openFacilities[idx] = !offspring[i].openFacilities[idx];
+                clie[i].openFacilities[idx] = !clie[i].openFacilities[idx];
             } else {
                 // Swap
                 vector<int> openIndices, closedIndices;
                 for(int f=0; f<instance_.n; ++f) {
-                    if (offspring[i].openFacilities[f]) openIndices.push_back(f);
+                    if (clie[i].openFacilities[f]) openIndices.push_back(f);
                     else closedIndices.push_back(f);
                 }
                 if (!openIndices.empty() && !closedIndices.empty()) {
@@ -187,14 +188,14 @@ void GA::nextGeneration(RunMetrics::Generation& current_metrics) {
                     int f_open = openIndices[randOpen(rng)];
                     int f_closed = closedIndices[randClosed(rng)];
                     
-                    offspring[i].openFacilities[f_open] = false;
-                    offspring[i].openFacilities[f_closed] = true;
+                    clie[i].openFacilities[f_open] = false;
+                    clie[i].openFacilities[f_closed] = true;
                 }
             }
         }
 
-        offspring[i].ensureAtLeastOneOpen();
-        Evaluator::evaluateFull(instance_, offspring[i]);
+        clie[i].ensureAtLeastOneOpen();
+        Evaluator::evaluateFull(instance_, clie[i]);
     }
     
     evo_timer.stop();
@@ -210,7 +211,7 @@ void GA::nextGeneration(RunMetrics::Generation& current_metrics) {
         // Unique Seed = Index + (Generation * LargeNumber)
         int unique_seed_modifier = i + (current_metrics.generation_index * 10000);
         
-        if (optimizeSolution(offspring[i], unique_seed_modifier)) {
+        if (optimizeSolution(clie[i], unique_seed_modifier)) {
             improvements++;
         }
     }
@@ -219,7 +220,7 @@ void GA::nextGeneration(RunMetrics::Generation& current_metrics) {
     current_metrics.time_localsearch_ms = ls_timer.elapsedMs();
     current_metrics.ls_improvements = improvements;
 
-    nextPop.insert(nextPop.end(), offspring.begin(), offspring.end());
+    nextPop.insert(nextPop.end(), clie.begin(), clie.end());
     population = nextPop;
     
     sort(population.begin(), population.end(), [](const Solution& a, const Solution& b) {

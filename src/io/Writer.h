@@ -18,4 +18,9 @@ public:
 
     // Append a CSV row. Creates file with header if missing.
     static bool appendCSV(const string& csv_path, const string& header_if_new, const string& row);
+
+    // Clean up old results in the specified base directory
+    static void cleanUpDirectory(const string& baseDir);
+
+    static void cleanUpFile(const string& filePath);
 };

@@ -11,22 +11,21 @@ struct GAParams {
     double mutation_rate{0.5}; // Increased slightly for better exploration
     unsigned long long seed{42};
 };
+struct Generation {
+    int generation_index;
+    double best_cost;
+    double avg_cost;
+    long long time_total_ms;
+    long long time_evolution_ms;
+    long long time_localsearch_ms;
+    int ls_improvements;
+};
 
 struct RunMetrics {
     std::string instance_name;
     int n_facilities;
     double final_cost;
     long long total_time_ms;
-    
-    struct Generation {
-        int generation_index;
-        double best_cost;
-        double avg_cost;
-        long long time_total_ms;
-        long long time_evolution_ms;
-        long long time_localsearch_ms;
-        int ls_improvements;
-    };
     std::vector<Generation> history;
 };
 
@@ -42,7 +41,7 @@ private:
     std::vector<Solution> population;
 
     void initializePopulation();
-    void nextGeneration(RunMetrics::Generation& current_metrics);
+    void nextGeneration(Generation& current_metrics);
     void evaluatePopulation();
     std::vector<Solution> selectElite(int k) const;
     

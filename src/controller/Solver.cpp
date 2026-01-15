@@ -65,65 +65,65 @@ PipelineResult Solver::solveInstance(const string& instance_path, const GAParams
     // --- STAGE 3: Stochastic SA (10 Runs) ---
     // cout << "  [Stage 3] Running Stochastic SA (10x)..." << endl;
     
-    fs::path p(instance.filePath);
-    string baseDir = "results/" + p.stem().string();
-    Writer::ensureDirectory(baseDir);
-    string logFile = baseDir + "/stochastic_log.csv";
+    // fs::path p(instance.filePath);
+    // string baseDir = "results/" + p.stem().string();
+    // Writer::ensureDirectory(baseDir);
+    // string logFile = baseDir + "/stochastic_log.csv";
     
-    // Create Log File with Header
-    {
-        ofstream log(logFile);
-        log << "Run,Cost" << endl;
-    }
+    // // Create Log File with Header
+    // {
+    //     ofstream log(logFile);
+    //     log << "Run,Cost" << endl;
+    // }
 
-    vector<double> run_costs;
-    Solution best_of_all_runs;
-    best_of_all_runs.total_cost = numeric_limits<double>::infinity();
+    // vector<double> run_costs;
+    // Solution best_of_all_runs;
+    // best_of_all_runs.total_cost = numeric_limits<double>::infinity();
 
-    int n_runs = 10;
-    for (int i = 1; i <= n_runs; ++i) {
-        vector<Solution> robust_pool = solveStochastic(instance, sa_params, polished_pool, result.stage2_det_sa, mc_samples, mc_k);
+    // int n_runs = 10;
+    // for (int i = 1; i <= n_runs; ++i) {
+    //     vector<Solution> robust_pool = solveStochastic(instance, sa_params, polished_pool, result.stage2_det_sa, mc_samples, mc_k);
 
-        double current_cost = 0.0;
-        if (!robust_pool.empty()) {
-            // Sort to find best in this pool
-            sort(robust_pool.begin(), robust_pool.end(), [](const Solution& a, const Solution& b){
-                return a.total_cost < b.total_cost;
-            });
+    //     double current_cost = 0.0;
+    //     if (!robust_pool.empty()) {
+    //         // Sort to find best in this pool
+    //         sort(robust_pool.begin(), robust_pool.end(), [](const Solution& a, const Solution& b){
+    //             return a.total_cost < b.total_cost;
+    //         });
             
-            Solution& best_run = robust_pool.front();
-            current_cost = best_run.total_cost;
+    //         Solution& best_run = robust_pool.front();
+    //         current_cost = best_run.total_cost;
 
-            // Update Global Best
-            if (best_run.total_cost < best_of_all_runs.total_cost) {
-                best_of_all_runs = best_run;
-            }
-        } else {
-            // Fallback to deterministic if Stoch SA failed entirely
-            current_cost = result.stage2_det_sa.total_cost;
-        }
+    //         // Update Global Best
+    //         if (best_run.total_cost < best_of_all_runs.total_cost) {
+    //             best_of_all_runs = best_run;
+    //         }
+    //     } else {
+    //         // Fallback to deterministic if Stoch SA failed entirely
+    //         current_cost = result.stage2_det_sa.total_cost;
+    //     }
 
-        run_costs.push_back(current_cost);
+    //     run_costs.push_back(current_cost);
         
-        // Log to file
-        stringstream ss;
-        ss << i << "," << fixed << setprecision(2) << current_cost;
-        Writer::appendCSV(logFile, "", ss.str()); // Empty header since we created file above
-    }
+    //     // Log to file
+    //     stringstream ss;
+    //     ss << i << "," << fixed << setprecision(2) << current_cost;
+    //     Writer::appendCSV(logFile, "", ss.str()); // Empty header since we created file above
+    // }
 
-    // Finalize Stage 3 Results
-    if (best_of_all_runs.total_cost == numeric_limits<double>::infinity()) {
-        result.stage3_stoch_sa = result.stage2_det_sa; // Fallback
-    } else {
-        result.stage3_stoch_sa = best_of_all_runs;
-    }
+    // // Finalize Stage 3 Results
+    // if (best_of_all_runs.total_cost == numeric_limits<double>::infinity()) {
+    //     result.stage3_stoch_sa = result.stage2_det_sa; // Fallback
+    // } else {
+    //     result.stage3_stoch_sa = best_of_all_runs;
+    // }
 
-    // Calculate Average
-    double sum = accumulate(run_costs.begin(), run_costs.end(), 0.0);
-    result.stage3_avg_cost = (run_costs.empty()) ? 0.0 : (sum / run_costs.size());
+    // // Calculate Average
+    // double sum = accumulate(run_costs.begin(), run_costs.end(), 0.0);
+    // result.stage3_avg_cost = (run_costs.empty()) ? 0.0 : (sum / run_costs.size());
 
-    // Save the Best Stochastic Solution to file
-    Writer::writeSolution(baseDir + "/solution_stage3_stoch_sa.txt", result.stage3_stoch_sa);
+    // // Save the Best Stochastic Solution to file
+    // Writer::writeSolution(baseDir + "/solution_stage3_stoch_sa.txt", result.stage3_stoch_sa);
 
     return result;
 }
@@ -144,6 +144,10 @@ void Solver::solveAllInDirectory(const string& dir_path, const GAParams& ga_para
     
     cout << "Found " << total << " instances. Starting Pipeline..." << endl;
 
+    ofstream summary("results/summary.csv");
+    Writer::ensureDirectory("results");
+    Writer::appendCSV("results/summary.csv", "Instance,GA,Det_SA,Stoch_SA", "");
+
     for (int i = 0; i < total; ++i) {
         string f = files[i];
         
@@ -160,7 +164,13 @@ void Solver::solveAllInDirectory(const string& dir_path, const GAParams& ga_para
         cout << "] " << int(progress * 100.0) << "% " << fs::path(f).filename().string() << "   ";
         cout.flush();
 
-        solveInstance(f, ga_params, sa_params, mc_samples, mc_k);
+        PipelineResult result = solveInstance(f, ga_params, sa_params, mc_samples, mc_k);
+        stringstream row;
+        row << fs::path(f).filename().string() << "," 
+            << result.stage1_ga.total_cost << ","
+            << result.stage2_det_sa.total_cost << ","
+            << fixed << setprecision(2) << result.stage3_stoch_sa.total_cost;
+        Writer::appendCSV("results/summary.csv", "", row.str());
     }
     cout << endl << "Batch run complete. Check 'results/' folders." << endl;
 }
@@ -177,6 +187,7 @@ vector<Solution> Solver::solveDeterministic(const Instance& instance, const GAPa
 
     fs::path p(metrics.instance_name);
     string baseDir = "results/" + p.stem().string();
+    Writer::cleanUpDirectory(baseDir);
     Writer::ensureDirectory("results");
     Writer::ensureDirectory(baseDir);
 
