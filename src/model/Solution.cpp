@@ -1,17 +1,28 @@
 #include "Solution.h"
-#include <limits>
+#include <algorithm>
+#include <random>
 
 using namespace std;
 
-Solution::Solution(int n) {
+Solution::Solution() : total_cost(0.0) {}
+
+// UPDATED: Now takes n (facilities) and m (clients)
+Solution::Solution(int n, int m) : total_cost(0.0) {
+    // 1. Setup Facilities (Size N)
     openFacilities.assign(n, false);
-    assigned_facility.assign(n, {-1, numeric_limits<double>::infinity()});
-    total_cost = 0.0;
+    
+    // 2. Setup Client Cache (Size M)
+    // -1 means "no facility assigned"
+    // infinity means "infinite cost"
+    assigned_facility.assign(m, {-1, numeric_limits<double>::infinity()});
 }
 
 void Solution::ensureAtLeastOneOpen() {
-    bool any = false;
-    for (bool b : openFacilities) { if (b) { any = true; break; } }
-    if (!any && !openFacilities.empty()) openFacilities[0] = true;
+    for (bool open : openFacilities) {
+        if (open) return;
+    }
+    // If none open, open the first one
+    if (!openFacilities.empty()) {
+        openFacilities[0] = true;
+    }
 }
-

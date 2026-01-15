@@ -1,37 +1,53 @@
 #pragma once
-
-#include <vector>
-#include <functional>
 #include "io/Instance.h"
 #include "model/Solution.h"
-
-using namespace std;
+#include <vector>
+#include <utility>
 
 struct GAParams {
-    int pop_size{50};
-    int max_generations{200};
-    double crossover_rate{0.8};
-    double mutation_rate{0.02};
-    int elite_k{5};
+    int pop_size{100};
+    int max_generations{300};
+    int elite_k{10};
+    double mutation_rate{0.5}; // Increased slightly for better exploration
     unsigned long long seed{42};
 };
 
-// Genetic Algorithm for deterministic phase (chromosome = y vector).
+struct RunMetrics {
+    std::string instance_name;
+    int n_facilities;
+    double final_cost;
+    long long total_time_ms;
+    
+    struct Generation {
+        int generation_index;
+        double best_cost;
+        double avg_cost;
+        long long time_total_ms;
+        long long time_evolution_ms;
+        long long time_localsearch_ms;
+        int ls_improvements;
+    };
+    std::vector<Generation> history;
+};
+
 class GA {
 public:
-    explicit GA(GAParams params, Instance instance);
+    GA(GAParams params, Instance instance);
 
-    // Run GA and return top-k elite solutions evaluated deterministically.
-    vector<Solution> run(const Instance& inst, int elite_k_override = -1);
+    std::pair<std::vector<Solution>, RunMetrics> run(const Instance& inst, int elite_k_override = -1);
 
 private:
     GAParams params_;
     Instance instance_;
-    vector<Solution> population;
+    std::vector<Solution> population;
 
-    // Internal helpers
     void initializePopulation();
+    void nextGeneration(RunMetrics::Generation& current_metrics);
     void evaluatePopulation();
-    void nextGeneration();
-    vector<Solution> selectElite(int k) const;
+    std::vector<Solution> selectElite(int k) const;
+    
+    
+    // Core Helpers
+    bool optimizeSolution(Solution& sol, int seed_offset); // <--- Updated Signature
+    Solution generateGreedySolution();    // <--- NEW: Smart Initialization
 };

@@ -1,26 +1,25 @@
 #pragma once
-
-#include <functional>
-#include "io/Instance.h"
 #include "model/Solution.h"
+#include "io/Instance.h"
+#include <functional>
+#include <vector>
 
 using namespace std;
-using CostEstimator = function<double(const Instance&, const Solution&)>;
 
 struct SAParams {
-    double T0{1.0};
+    double T0{1000.0};
+    double Tmin{0.01};
     double alpha{0.95};
-    int iters_per_T{1000};
-    double Tmin{1e-3};
+    int iters_per_T{100};
     unsigned long long seed{42};
 };
 
-// Simulated Annealing for the stochastic refinement phase.
+// Flexible function type to calculate cost (Deterministic or Stochastic)
+using CostEstimator = function<double(const Instance&, const Solution&)>;
+
 class SA {
 public:
     explicit SA(SAParams params);
-
-    // Refine a given seed solution using the provided cost estimator (e.g., Monte Carlo).
     Solution refine(const Instance& inst, const Solution& seed, const CostEstimator& estimator);
 
 private:
