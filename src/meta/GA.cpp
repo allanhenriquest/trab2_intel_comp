@@ -17,9 +17,9 @@ GA::GA(GAParams params, Instance instance) : params_(params), instance_(instance
     rng.seed(params.seed);
 }
 
-pair<vector<Solution>, RunMetrics> GA::run(const Instance& inst, int elite_k_override) {
+pair<vector<Solution>, GaRunMetrics> GA::run(const Instance& inst, int elite_k_override) {
     instance_ = inst;
-    RunMetrics run_data;
+    GaRunMetrics run_data;
     run_data.instance_name = inst.filePath;
     run_data.n_facilities = inst.n;
 
@@ -35,7 +35,7 @@ pair<vector<Solution>, RunMetrics> GA::run(const Instance& inst, int elite_k_ove
     });
 
     for (int gen = 0; gen < params_.max_generations; ++gen) {
-        Generation gm;
+        GaGeneration gm;
         gm.generation_index = gen;
         Timer gen_timer; 
         gen_timer.start();
@@ -135,7 +135,7 @@ void GA::evaluatePopulation() {
     }
 }
 
-void GA::nextGeneration(Generation& current_metrics) { 
+void GA::nextGeneration(GaGeneration& current_metrics) { 
     Timer evo_timer; evo_timer.start();
 
     vector<Solution> nextPop;
@@ -146,7 +146,7 @@ void GA::nextGeneration(Generation& current_metrics) {
     nextPop.insert(nextPop.end(), population.begin(), population.begin() + elites);
 
     int needed = params_.pop_size - elites;
-    vector<Solution> clie(needed, Solution(instance_.n, instance_.m));
+    vector<Solution> childreen(needed, Solution(instance_.n, instance_.m));
     
     uniform_int_distribution<int> distIdx(0, params_.pop_size - 1);
     uniform_int_distribution<int> distN(0, instance_.n - 1);
@@ -165,7 +165,7 @@ void GA::nextGeneration(Generation& current_metrics) {
 
         // Uniform Crossover
         for(int j=0; j<instance_.n; ++j) {
-            clie[i].openFacilities[j] = (dist01(rng) < 0.5) ? parent1.openFacilities[j] : parent2.openFacilities[j];
+            childreen[i].openFacilities[j] = (dist01(rng) < 0.5) ? parent1.openFacilities[j] : parent2.openFacilities[j];
         }
         
         // Mutation (Flip & Swap)
@@ -173,12 +173,12 @@ void GA::nextGeneration(Generation& current_metrics) {
             if (dist01(rng) < 0.5) {
                 // Flip
                 int idx = distN(rng);
-                clie[i].openFacilities[idx] = !clie[i].openFacilities[idx];
+                childreen[i].openFacilities[idx] = !childreen[i].openFacilities[idx];
             } else {
                 // Swap
                 vector<int> openIndices, closedIndices;
                 for(int f=0; f<instance_.n; ++f) {
-                    if (clie[i].openFacilities[f]) openIndices.push_back(f);
+                    if (childreen[i].openFacilities[f]) openIndices.push_back(f);
                     else closedIndices.push_back(f);
                 }
                 if (!openIndices.empty() && !closedIndices.empty()) {
@@ -188,14 +188,14 @@ void GA::nextGeneration(Generation& current_metrics) {
                     int f_open = openIndices[randOpen(rng)];
                     int f_closed = closedIndices[randClosed(rng)];
                     
-                    clie[i].openFacilities[f_open] = false;
-                    clie[i].openFacilities[f_closed] = true;
+                    childreen[i].openFacilities[f_open] = false;
+                    childreen[i].openFacilities[f_closed] = true;
                 }
             }
         }
 
-        clie[i].ensureAtLeastOneOpen();
-        Evaluator::evaluateFull(instance_, clie[i]);
+        childreen[i].ensureAtLeastOneOpen();
+        Evaluator::evaluateFull(instance_, childreen[i]);
     }
     
     evo_timer.stop();
@@ -205,13 +205,12 @@ void GA::nextGeneration(Generation& current_metrics) {
     int improvements = 0;
     
     // PARALLEL PART: Local Search
-    // FIX: Pass a unique, deterministic seed offset to each thread
     #pragma omp parallel for reduction(+:improvements)
     for(int i=0; i<needed; ++i) {
         // Unique Seed = Index + (Generation * LargeNumber)
         int unique_seed_modifier = i + (current_metrics.generation_index * 10000);
         
-        if (optimizeSolution(clie[i], unique_seed_modifier)) {
+        if (optimizeSolution(childreen[i], unique_seed_modifier)) {
             improvements++;
         }
     }
@@ -220,7 +219,7 @@ void GA::nextGeneration(Generation& current_metrics) {
     current_metrics.time_localsearch_ms = ls_timer.elapsedMs();
     current_metrics.ls_improvements = improvements;
 
-    nextPop.insert(nextPop.end(), clie.begin(), clie.end());
+    nextPop.insert(nextPop.end(), childreen.begin(), childreen.end());
     population = nextPop;
     
     sort(population.begin(), population.end(), [](const Solution& a, const Solution& b) {

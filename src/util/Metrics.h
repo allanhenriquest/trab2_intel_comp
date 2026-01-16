@@ -4,22 +4,35 @@
 
 using namespace std;
 
-// Stores stats for a SINGLE generation
-struct GenerationMetrics {
+struct GAParams {
+    int pop_size{100};
+    int max_generations{300};
+    int elite_k{10};
+    double mutation_rate{0.5};
+    unsigned long long seed{42};
+};
+struct GaGeneration {
     int generation_index;
     double best_cost;
     double avg_cost;
-    long long time_total_ms;        // Time for the whole generation
-    long long time_evolution_ms;    // Time for selection/crossover/mutation
-    long long time_localsearch_ms;  // Time specifically for "The Auditor"
-    int ls_improvements;            // How many times did LS improve a solution?
+    long long time_total_ms;
+    long long time_evolution_ms;
+    long long time_localsearch_ms;
+    int ls_improvements;
 };
 
-// Stores the summary of a full run on ONE instance
-struct RunMetrics {
-    string instance_name;
+struct GaRunMetrics {
+    std::string instance_name;
     int n_facilities;
     double final_cost;
     long long total_time_ms;
-    vector<GenerationMetrics> history; // The generation-by-generation breakdown
+    std::vector<GaGeneration> history;
+};
+
+struct SAParams {
+    double T0{1000.0};
+    double Tmin{0.01};
+    double alpha{0.95};
+    int iters_per_T{100};
+    unsigned long long seed{42};
 };

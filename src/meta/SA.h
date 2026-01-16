@@ -3,16 +3,9 @@
 #include "io/Instance.h"
 #include <functional>
 #include <vector>
+#include "util/Metrics.h"
 
 using namespace std;
-
-struct SAParams {
-    double T0{1000.0};
-    double Tmin{0.01};
-    double alpha{0.95};
-    int iters_per_T{100};
-    unsigned long long seed{42};
-};
 
 // Flexible function type to calculate cost (Deterministic or Stochastic)
 using CostEstimator = function<double(const Instance&, const Solution&)>;

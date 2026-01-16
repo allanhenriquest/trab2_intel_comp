@@ -14,7 +14,6 @@ Instance::Instance(const string& path, bool verbose) : filePath(path) {
         return;
     }
 
-    // --- FIX: Handle optional header like "FILE: 500-10" ---
     string token;
     // Peek at the first word
     in >> token;

@@ -9,13 +9,11 @@
 #include <sstream>
 #include <numeric>
 #include <fstream>
+#include "util/Metrics.h"
+#include "util/Timer.h"
 
 namespace fs = std::filesystem;
 using namespace std;
-
-// =========================================================
-// PUBLIC METHODS
-// =========================================================
 
 PipelineResult Solver::solveInstance(const string& instance_path, const GAParams& ga_params, 
     const SAParams& sa_params, int mc_samples, int mc_k) 
@@ -27,43 +25,30 @@ PipelineResult Solver::solveInstance(const string& instance_path, const GAParams
     if (instance.n == 0) {
         cerr << "[CRITICAL ERROR] Instance failed to load (N=0). Aborting." << endl;
         PipelineResult fail;
-        fail.stage1_ga = Solution(0, 0); 
-        fail.stage2_det_sa = Solution(0, 0);
-        fail.stage3_stoch_sa = Solution(0, 0);
-        fail.stage3_avg_cost = 0.0;
-        return fail; 
+        fail.best_ga = Solution(0, 0);
+        fail.best_stoch_sa = Solution(0, 0);
+        fail.stoch_sa_avg_cost = 0.0;
+        return fail;
     }
 
     PipelineResult result;
     
     // --- STAGE 1: Deterministic GA ---
-    // cout << "  [Stage 1] Running GA..." << endl;
-    vector<Solution> ga_pool = solveDeterministic(instance, ga_params);
-    
+    auto ga_res = solveDeterministic(instance, ga_params);
+    vector<Solution>& ga_pool = ga_res.first;    
+    GaRunMetrics& ga_metrics = ga_res.second;
+
+    result.ga_time_ms = ga_metrics.total_time_ms;
+
     if (ga_pool.empty()) {
-        result.stage1_ga = Solution(instance.n, instance.m);
-        result.stage2_det_sa = Solution(instance.n, instance.m);
-        result.stage3_stoch_sa = Solution(instance.n, instance.m);
-        result.stage3_avg_cost = 0.0;
-        return result; 
+        result.best_ga = Solution(instance.n, instance.m);
+        result.best_stoch_sa = Solution(instance.n, instance.m);
+        result.stoch_sa_avg_cost = 0.0;
+        return result;
     }
-    result.stage1_ga = ga_pool.front(); 
+    result.best_ga = ga_pool.front();
 
-    // --- STAGE 2: Deterministic SA ---
-    // cout << "  [Stage 2] Running Deterministic SA..." << endl;
-    vector<Solution> polished_pool = solveDeterministicSA(instance, sa_params, ga_pool);
-    
-    if (!polished_pool.empty()) {
-        sort(polished_pool.begin(), polished_pool.end(), [](const Solution& a, const Solution& b){
-            return a.total_cost < b.total_cost;
-        });
-        result.stage2_det_sa = polished_pool.front();
-    } else {
-        result.stage2_det_sa = result.stage1_ga; 
-    }
-
-    // --- STAGE 3: Stochastic SA (10 Runs) ---
-    // cout << "  [Stage 3] Running Stochastic SA (10x)..." << endl;
+    // --- STAGE 2: Stochastic SA (10 Runs) ---
     
     // fs::path p(instance.filePath);
     // string baseDir = "results/" + p.stem().string();
@@ -111,20 +96,20 @@ PipelineResult Solver::solveInstance(const string& instance_path, const GAParams
     //     Writer::appendCSV(logFile, "", ss.str()); // Empty header since we created file above
     // }
 
-    // // Finalize Stage 3 Results
+    // // Finalize Stage 2 Results
     // if (best_of_all_runs.total_cost == numeric_limits<double>::infinity()) {
-    //     result.stage3_stoch_sa = result.stage2_det_sa; // Fallback
+    //     result.stage2_stoch_sa = result.stage2_det_sa; // Fallback
     // } else {
-    //     result.stage3_stoch_sa = best_of_all_runs;
+    //     result.stage2_stoch_sa = best_of_all_runs;
     // }
 
     // // Calculate Average
     // double sum = accumulate(run_costs.begin(), run_costs.end(), 0.0);
-    // result.stage3_avg_cost = (run_costs.empty()) ? 0.0 : (sum / run_costs.size());
+    // result.stage2_avg_cost = (run_costs.empty()) ? 0.0 : (sum / run_costs.size());
 
     // // Save the Best Stochastic Solution to file
-    // Writer::writeSolution(baseDir + "/solution_stage3_stoch_sa.txt", result.stage3_stoch_sa);
-
+    // Writer::writeSolution(baseDir + "/solution_stage2_stoch_sa.txt", result.stage2_stoch_sa);
+    result.stoch_sa_time_ms = 0.0; // Placeholder since stage 2 is commented out
     return result;
 }
 
@@ -144,9 +129,9 @@ void Solver::solveAllInDirectory(const string& dir_path, const GAParams& ga_para
     
     cout << "Found " << total << " instances. Starting Pipeline..." << endl;
 
-    ofstream summary("results/summary.csv");
+    Writer::cleanUpFile("results/summary.csv");
     Writer::ensureDirectory("results");
-    Writer::appendCSV("results/summary.csv", "Instance,GA,Det_SA,Stoch_SA", "");
+    Writer::appendCSV("results/summary.csv", "Instance,GA,Stoch_SA,Time_GA,Time_Stoch_SA", "");
 
     for (int i = 0; i < total; ++i) {
         string f = files[i];
@@ -167,23 +152,20 @@ void Solver::solveAllInDirectory(const string& dir_path, const GAParams& ga_para
         PipelineResult result = solveInstance(f, ga_params, sa_params, mc_samples, mc_k);
         stringstream row;
         row << fs::path(f).filename().string() << "," 
-            << result.stage1_ga.total_cost << ","
-            << result.stage2_det_sa.total_cost << ","
-            << fixed << setprecision(2) << result.stage3_stoch_sa.total_cost;
+            << (int)(result.best_ga.total_cost) << ","
+            << fixed << setprecision(2) << result.best_stoch_sa.total_cost << ","
+            << fixed << setprecision(2) << result.ga_time_ms << ","
+            << fixed << setprecision(2) << result.stoch_sa_time_ms;
         Writer::appendCSV("results/summary.csv", "", row.str());
     }
     cout << endl << "Batch run complete. Check 'results/' folders." << endl;
 }
 
-// =========================================================
-// PIPELINE STAGES
-// =========================================================
-
-vector<Solution> Solver::solveDeterministic(const Instance& instance, const GAParams& ga_params) {
+pair<vector<Solution>, GaRunMetrics> Solver::solveDeterministic(const Instance& instance, const GAParams& ga_params) {
     GA ga(ga_params, instance);
     auto ga_res = ga.run(instance, ga_params.elite_k); 
     vector<Solution>& solutions = ga_res.first;
-    RunMetrics& metrics = ga_res.second;
+    GaRunMetrics& metrics = ga_res.second;
 
     fs::path p(metrics.instance_name);
     string baseDir = "results/" + p.stem().string();
@@ -202,38 +184,7 @@ vector<Solution> Solver::solveDeterministic(const Instance& instance, const GAPa
         Writer::appendCSV(baseDir + "/history_ga.csv", "Gen,Best,Avg,Time,Improv", row.str());
     }
 
-    return solutions;
-}
-
-vector<Solution> Solver::solveDeterministicSA(const Instance& instance, const SAParams& sa_params, 
-    const vector<Solution>& initialPool) 
-{
-    SA sa(sa_params);
-    vector<Solution> refined_pool;
-
-    CostEstimator det_estimator = [&](const Instance& inst, const Solution& sol) -> double {
-        Solution temp = sol; 
-        Evaluator::evaluateFull(inst, temp);
-        return temp.total_cost;
-    };
-
-    for (const auto& seed : initialPool) {
-        if (seed.openFacilities.empty()) continue; 
-        refined_pool.push_back(sa.refine(instance, seed, det_estimator));
-    }
-    
-    if (!refined_pool.empty()) {
-        vector<Solution> sorted = refined_pool;
-        sort(sorted.begin(), sorted.end(), [](const Solution& a, const Solution& b){
-             return a.total_cost < b.total_cost; 
-        });
-        
-        fs::path p(instance.filePath);
-        string baseDir = "results/" + p.stem().string();
-        Writer::writeSolution(baseDir + "/solution_stage2_det_sa.txt", sorted.front());
-    }
-    
-    return refined_pool;
+    return pair(solutions, metrics);
 }
 
 vector<Solution> Solver::solveStochastic(const Instance& instance, const SAParams& sa_params, 
@@ -252,6 +203,5 @@ vector<Solution> Solver::solveStochastic(const Instance& instance, const SAParam
     for (const auto& seed : initialPool) {
         robust_pool.push_back(sa.refine(instance, seed, stoch_estimator));
     }
-    // Note: Logging is now done in solveInstance loop
     return robust_pool;
 }

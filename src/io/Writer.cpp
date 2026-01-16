@@ -47,6 +47,8 @@ bool Writer::appendCSV(const string& csv_path, const string& header_if_new, cons
         out << header_if_new << "\n";
     }
     
+    if(row.empty()) return true; // Nothing to append
+    
     out << row << "\n";
     return true;
 }

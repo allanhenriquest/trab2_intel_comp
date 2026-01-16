@@ -11,9 +11,7 @@ struct Solution {
     
     vector<bool> openFacilities; // Size N
     
-    // Cache: {FacilityIndex, ServiceCost} for each client
-    // Size M (Must be M, not N!)
-    vector<pair<int, double>> assigned_facility; 
+    vector<pair<int, double>> assigned_facility; // Size M: (facility_index, allocation_cost)
 
     double total_cost;
 
