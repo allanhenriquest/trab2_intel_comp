@@ -74,7 +74,10 @@ void GA::initializePopulation() {
     for(int i = 1; i < params_.pop_size; ++i) {
         Solution sol(instance_.n, instance_.m);
         for(int j=0; j < instance_.n; ++j) {
-            sol.openFacilities[j] = (dist(rng) < p_open);
+            if (dist(rng) < p_open) {
+                sol.openFacilities[j] = true;
+                sol.num_open_facilities++;
+            }
         }
         sol.ensureAtLeastOneOpen();
         population.push_back(sol);
@@ -146,14 +149,18 @@ void GA::nextGeneration(GaGeneration& current_metrics) {
     nextPop.insert(nextPop.end(), population.begin(), population.begin() + elites);
 
     int needed = params_.pop_size - elites;
-    vector<Solution> childreen(needed, Solution(instance_.n, instance_.m));
+    vector<Solution> childreen;
+    childreen.reserve(needed);
     
     uniform_int_distribution<int> distIdx(0, params_.pop_size - 1);
     uniform_int_distribution<int> distN(0, instance_.n - 1);
     uniform_real_distribution<double> dist01(0.0, 1.0);
 
-    // SERIAL PART: Selection & Mutation
+    // SERIAL PART: Selection, Crossover & Mutation
     for(int i=0; i<needed; ++i) {
+        // Create new child
+        childreen.emplace_back(instance_.n, instance_.m);
+        
         // Tournament Selection
         const Solution& p1 = population[distIdx(rng)];
         const Solution& p2 = population[distIdx(rng)];
@@ -165,7 +172,9 @@ void GA::nextGeneration(GaGeneration& current_metrics) {
 
         // Uniform Crossover
         for(int j=0; j<instance_.n; ++j) {
-            childreen[i].openFacilities[j] = (dist01(rng) < 0.5) ? parent1.openFacilities[j] : parent2.openFacilities[j];
+            bool should_open = (dist01(rng) < 0.5) ? parent1.openFacilities[j] : parent2.openFacilities[j];
+            childreen[i].openFacilities[j] = should_open;
+            if (should_open) childreen[i].num_open_facilities++;
         }
         
         // Mutation (Flip & Swap)
@@ -173,13 +182,24 @@ void GA::nextGeneration(GaGeneration& current_metrics) {
             if (dist01(rng) < 0.5) {
                 // Flip
                 int idx = distN(rng);
-                childreen[i].openFacilities[idx] = !childreen[i].openFacilities[idx];
+                if (childreen[i].openFacilities[idx]) {
+                    childreen[i].openFacilities[idx] = false;
+                    childreen[i].num_open_facilities--;
+                } else {
+                    childreen[i].openFacilities[idx] = true;
+                    childreen[i].num_open_facilities++;
+                }
             } else {
                 // Swap
                 vector<int> openIndices, closedIndices;
+                openIndices.reserve(instance_.n);
+                closedIndices.reserve(instance_.n);
+                
                 for(int f=0; f<instance_.n; ++f) {
-                    if (childreen[i].openFacilities[f]) openIndices.push_back(f);
-                    else closedIndices.push_back(f);
+                    if (childreen[i].openFacilities[f]) 
+                        openIndices.push_back(f);
+                    else 
+                        closedIndices.push_back(f);
                 }
                 if (!openIndices.empty() && !closedIndices.empty()) {
                     uniform_int_distribution<int> randOpen(0, openIndices.size()-1);
@@ -190,11 +210,17 @@ void GA::nextGeneration(GaGeneration& current_metrics) {
                     
                     childreen[i].openFacilities[f_open] = false;
                     childreen[i].openFacilities[f_closed] = true;
+                    // No change to num_open_facilities (swap keeps count same)
                 }
             }
         }
 
         childreen[i].ensureAtLeastOneOpen();
+    }
+    
+    // PARALLEL PART: Evaluate all children
+    #pragma omp parallel for
+    for(int i=0; i<needed; ++i) {
         Evaluator::evaluateFull(instance_, childreen[i]);
     }
     
@@ -245,13 +271,14 @@ bool GA::optimizeSolution(Solution& sol, int seed_offset) {
         shuffle(indices.begin(), indices.end(), local_rng);
 
         for (int facility : indices) {
+            // Save state before modification (Otimização 2)
             double old_cost = sol.total_cost;
+            bool was_open = sol.openFacilities[facility];
+            vector<pair<int, double>> old_assignments = sol.assigned_facility;
             
             if (sol.openFacilities[facility]) {
-                 // Try closing
-                 int count = 0;
-                 for(auto b : sol.openFacilities) if(b) count++;
-                 if (count > 1) {
+                 // Try closing (using cached count)
+                 if (sol.num_open_facilities > 1) {
                     Evaluator::closeFacility(facility, instance_, sol);
                  } else {
                     continue; 
@@ -266,13 +293,10 @@ bool GA::optimizeSolution(Solution& sol, int seed_offset) {
                 overall_improvement = true;
                 break; // Restart scan
             } else {
-                // Revert
-                if (sol.openFacilities[facility]) {
-                    Evaluator::closeFacility(facility, instance_, sol);
-                } else {
-                    Evaluator::openFacility(facility, instance_, sol);
-                }
-                sol.total_cost = old_cost; 
+                // Fast revert using saved state
+                sol.openFacilities[facility] = was_open;
+                sol.total_cost = old_cost;
+                sol.assigned_facility = old_assignments;
             }
         }
     }

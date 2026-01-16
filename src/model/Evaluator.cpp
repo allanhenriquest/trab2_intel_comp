@@ -6,12 +6,14 @@ using namespace std;
 
 void Evaluator::evaluateFull(const Instance& inst, Solution& sol) {
     sol.total_cost = 0.0;
+    sol.num_open_facilities = 0;
     
     // 1. Calculate Fixed Costs (Opening Costs)
     for (int i = 0; i < inst.n; ++i) {
         if (sol.openFacilities[i]) {
             // FIX: Use 'opening_costs' (plural) with index [i]
             sol.total_cost += inst.opening_costs[i];
+            sol.num_open_facilities++;
         }
     }
 
@@ -48,6 +50,7 @@ void Evaluator::openFacility(int facility, const Instance& inst, Solution& sol) 
     // FIX: Use 'opening_costs' (plural)
     sol.total_cost += inst.opening_costs[facility];
     sol.openFacilities[facility] = true;
+    sol.num_open_facilities++;
 
     // 2. Update Clients (Incremental)
     // Check if this new facility is closer than their current assignment
@@ -70,6 +73,7 @@ void Evaluator::closeFacility(int facility, const Instance& inst, Solution& sol)
     // FIX: Use 'opening_costs' (plural)
     sol.total_cost -= inst.opening_costs[facility];
     sol.openFacilities[facility] = false;
+    sol.num_open_facilities--;
 
     // 2. Update Clients (Incremental)
     for (int j = 0; j < inst.m; ++j) {

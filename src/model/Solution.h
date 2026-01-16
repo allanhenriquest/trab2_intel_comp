@@ -14,6 +14,7 @@ struct Solution {
     vector<pair<int, double>> assigned_facility; // Size M: (facility_index, allocation_cost)
 
     double total_cost;
+    int num_open_facilities; // Cached count of open facilities
 
     // Constructors
     Solution();
