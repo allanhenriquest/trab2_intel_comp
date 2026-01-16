@@ -62,5 +62,6 @@ Instance::Instance(const string& path, bool verbose) : filePath(path) {
         }
     }
 
-    if (verbose) cout << "Loaded Instance: " << n << " facilities, " << m << " customers." << endl;
+    if (verbose) 
+        cout << "Loaded Instance: " << n << " facilities, " << m << " customers." << endl;
 }

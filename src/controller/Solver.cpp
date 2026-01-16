@@ -131,7 +131,10 @@ void Solver::solveAllInDirectory(const string& dir_path, const GAParams& ga_para
 
     Writer::cleanUpFile("results/summary.csv");
     Writer::ensureDirectory("results");
-    Writer::appendCSV("results/summary.csv", "Instance,GA,Stoch_SA,Time_GA,Time_Stoch_SA", "");
+    Writer::appendCSV("results/summary.csv", "Instance,Best,GA,GA_Gap(%),Stoch_SA,Stoch_SA_Gap(%),GA_Time(ms),Stoch_SA_Time(ms)", "");
+
+    ifstream best_literature("best_literature.txt");
+    string dummy;
 
     for (int i = 0; i < total; ++i) {
         string f = files[i];
@@ -151,9 +154,16 @@ void Solver::solveAllInDirectory(const string& dir_path, const GAParams& ga_para
 
         PipelineResult result = solveInstance(f, ga_params, sa_params, mc_samples, mc_k);
         stringstream row;
-        row << fs::path(f).filename().string() << "," 
+        int literature_result;
+        best_literature >> dummy >> literature_result; // Skip filename
+        row << fs::path(f).filename().string() << ","
+            << literature_result << "," 
             << (int)(result.best_ga.total_cost) << ","
+            << fixed << setprecision(2) << ((result.best_ga.total_cost - 
+                literature_result) / literature_result * 100.0) << ","
             << fixed << setprecision(2) << result.best_stoch_sa.total_cost << ","
+            << fixed << setprecision(2) << ((result.best_stoch_sa.total_cost - 
+                literature_result) / literature_result * 100.0) << ","
             << fixed << setprecision(2) << result.ga_time_ms << ","
             << fixed << setprecision(2) << result.stoch_sa_time_ms;
         Writer::appendCSV("results/summary.csv", "", row.str());

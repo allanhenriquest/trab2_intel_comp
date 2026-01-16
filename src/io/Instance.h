@@ -15,5 +15,5 @@ public:
     
     string filePath;
 
-    Instance(const string& path, bool verbose = true);
+    Instance(const string& path, bool verbose = false);
 };
