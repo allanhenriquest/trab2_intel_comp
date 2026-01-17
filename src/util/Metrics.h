@@ -9,7 +9,7 @@ struct GAParams
     int pop_size{100};
     int max_generations{300};
     int elite_k{10};
-    double mutation_rate{0.5};
+    double mutation_rate{0.1};
     float open_threshold{50.0};   // Threshold for deciding when to open a facility
     float stop_threshold{0.0001}; // Percentage improvement threshold for stopping
     bool use_local_search{true};

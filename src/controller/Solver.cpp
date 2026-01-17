@@ -151,14 +151,18 @@ void Solver::solveAllInDirectory(const string& dir_path, const GAParams& ga_para
         
         stringstream row;
         int literature_result = BEST.at(instance_name);
+
+        double ga_gap = (result.best_ga.total_cost - literature_result) 
+                        / (double)literature_result * 100.0;
+        double sa_gap = (result.best_stoch_sa.expected_cost - literature_result) 
+                        / (double)literature_result * 100.0;
+
         row << instance_name << ","
             << literature_result << "," 
-            << (int)(result.best_ga.total_cost) << ","
-            << fixed << setprecision(2) << ((result.best_ga.total_cost - 
-                literature_result) / literature_result * 100.0) << ","
+            << result.best_ga.total_cost << ","
+            << fixed << setprecision(2) << ga_gap << ","
             << fixed << setprecision(2) << result.best_stoch_sa.expected_cost << ","
-            << fixed << setprecision(2) << ((result.best_stoch_sa.expected_cost - 
-                literature_result) / literature_result * 100.0) << ","
+            << fixed << setprecision(2) << sa_gap << ","
             << fixed << setprecision(2) << result.ga_time_ms << ","
             << fixed << setprecision(2) << result.stoch_sa_time_ms;
         Writer::appendCSV("results/summary.csv", "", row.str());
