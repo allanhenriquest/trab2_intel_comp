@@ -27,6 +27,9 @@ int main(int argc, char** argv) {
     ga_params.seed = rd();
 
     SAParams sa_params; 
+    random_device rd2;
+    sa_params.seed = rd2();
+    
     int mc_samples = 100;
     int mc_k = 5;
 

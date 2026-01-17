@@ -41,6 +41,6 @@ struct SAParams
     double T0{1000.0};
     double Tmin{0.01};
     double alpha{0.95};
-    int iters_per_T{100};
-    unsigned long long seed{42};
+    int iters_per_T{20};
+    unsigned long long seed;
 };

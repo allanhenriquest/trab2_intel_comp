@@ -4,7 +4,7 @@
 
 using namespace std;
 
-Solution::Solution() : total_cost(0.0), num_open_facilities(0) {}
+Solution::Solution() : total_cost(0), expected_cost(0.0), num_open_facilities(0) {}
 
 // UPDATED: Now takes n (facilities) and m (clients)
 Solution::Solution(int n, int m) : total_cost(0.0), num_open_facilities(0) {
@@ -14,11 +14,8 @@ Solution::Solution(int n, int m) : total_cost(0.0), num_open_facilities(0) {
 }
 
 void Solution::ensureAtLeastOneOpen() {
-    for (bool open : openFacilities) {
-        if (open) return;
-    }
-    if (!openFacilities.empty()) {
-        openFacilities[0] = true;
-        num_open_facilities = 1;
-    }
+    if(num_open_facilities > 0) 
+        return;
+    openFacilities[0] = true;
+    num_open_facilities = 1;
 }

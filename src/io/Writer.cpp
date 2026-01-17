@@ -21,11 +21,11 @@ void Writer::ensureDirectory(const string& path) {
 bool Writer::writeSolution(const string& path, const Solution& sol, unsigned long long seed) {
     ofstream out(path);
     if (!out) return false;
-    out << solToString(sol);
+    out << solToString(sol, seed);
     return true;
 }
 
-string Writer::solToString(const Solution& sol) {
+string Writer::solToString(const Solution& sol, unsigned long long seed) {
     stringstream ss;
     ss << "Total Cost: " << fixed << setprecision(2) << sol.total_cost << "\n";
     ss << "Open Facilities (" << sol.openFacilities.size() << " total):\n";
@@ -34,6 +34,7 @@ string Writer::solToString(const Solution& sol) {
             ss << i << " ";
     }
     ss << "\n";
+    ss << "Random Seed: " << seed << "\n";
     return ss.str();
 }
 

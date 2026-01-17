@@ -17,7 +17,7 @@ public:
     // Runs the Simulated Annealing process.
     // 'seed' is the starting solution (usually from GA).
     // 'estimator' is the cost function (in Phase 2, this will be the MonteCarlo simulation).
-    Solution refine(const Instance& inst, const Solution& seed, const CostEstimator& estimator);
+    Solution refine(const Instance& inst, const Solution& initial_sol, const CostEstimator& estimator);
 
 private:
     SAParams params_;

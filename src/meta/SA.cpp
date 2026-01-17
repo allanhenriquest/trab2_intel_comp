@@ -8,16 +8,15 @@ using namespace std;
 
 SA::SA(SAParams params) : params_(params) {}
 
-Solution SA::refine(const Instance& inst, const Solution& seed, const CostEstimator& estimator) {
+Solution SA::refine(const Instance& inst, const Solution& initial_sol, const CostEstimator& estimator) {
     // Initialize RNG
     mt19937 rng(params_.seed);
     uniform_real_distribution<double> dist01(0.0, 1.0);
     uniform_int_distribution<int> distN(0, inst.n - 1);
 
     // Initial evaluation
-    Solution current = seed;
-    // Note: If using stochastic estimator, this will run a short simulation
-    current.total_cost = estimator(inst, current); 
+    Solution current = initial_sol;
+    current.expected_cost = estimator(inst, current); 
     
     Solution best = current;
     double T = params_.T0;
@@ -37,15 +36,15 @@ Solution SA::refine(const Instance& inst, const Solution& seed, const CostEstima
             neighbor.ensureAtLeastOneOpen(); 
 
             // Calculate cost (Simulation happens here if estimator is stochastic)
-            neighbor.total_cost = estimator(inst, neighbor);
+            neighbor.expected_cost = estimator(inst, neighbor);
 
-            double delta = neighbor.total_cost - current.total_cost;
+            double delta = neighbor.expected_cost - current.expected_cost;
             
             // Acceptance criteria (Metropolis)
             if (delta < 0) {
                 // Improvement: always accept
                 current = neighbor;
-                if (current.total_cost < best.total_cost) {
+                if (current.expected_cost < best.expected_cost) {
                     best = current;
                 }
             } else {

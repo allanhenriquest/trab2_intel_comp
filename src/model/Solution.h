@@ -12,8 +12,9 @@ struct Solution {
     vector<bool> openFacilities; // Size N
     vector<pair<int, long>> assigned_facility; // Size M: (facility_index, allocation_cost)
 
-    long total_cost;
-    int num_open_facilities; // Cached count of open facilities
+    long total_cost;              // Deterministic cost (used by GA)
+    double expected_cost;         // Stochastic expected cost (used by SA with Monte Carlo)
+    int num_open_facilities;      // Cached count of open facilities
 
     // Constructors
     Solution();

@@ -15,7 +15,7 @@ public:
     static bool writeSolution(const string& path, const Solution& sol, unsigned long long seed);
 
     // Convert solution to a string representation.
-    static string solToString(const Solution& sol);
+    static string solToString(const Solution& sol, unsigned long long seed);
 
     // Append a CSV row. Creates file with header if missing.
     static bool appendCSV(const string& csv_path, const string& header_if_new, const string& row);

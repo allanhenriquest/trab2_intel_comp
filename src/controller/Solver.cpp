@@ -50,66 +50,62 @@ PipelineResult Solver::solveInstance(const string& instance_path, const GAParams
 
     // --- STAGE 2: Stochastic SA (10 Runs) ---
     
-    // fs::path p(instance.filePath);
-    // string baseDir = "results/" + p.stem().string();
-    // Writer::ensureDirectory(baseDir);
-    // string logFile = baseDir + "/stochastic_log.csv";
+    fs::path p(instance.filePath);
+    string baseDir = "results/" + p.stem().string();
+    Writer::ensureDirectory(baseDir);
+    string logFile = baseDir + "/stochastic_log.csv";
     
-    // // Create Log File with Header
-    // {
-    //     ofstream log(logFile);
-    //     log << "Run,Cost" << endl;
-    // }
 
-    // vector<double> run_costs;
-    // Solution best_of_all_runs;
-    // best_of_all_runs.total_cost = numeric_limits<double>::infinity();
+    Writer::appendCSV(logFile, "Run,ExpectedCost", ""); // Create with header
 
-    // int n_runs = 10;
-    // for (int i = 1; i <= n_runs; ++i) {
-    //     vector<Solution> robust_pool = solveStochastic(instance, sa_params, polished_pool, result.stage2_det_sa, mc_samples, mc_k);
+    vector<double> run_costs;
+    Solution best_of_all_runs;
+    best_of_all_runs.expected_cost = numeric_limits<double>::infinity();
 
-    //     double current_cost = 0.0;
-    //     if (!robust_pool.empty()) {
-    //         // Sort to find best in this pool
-    //         sort(robust_pool.begin(), robust_pool.end(), [](const Solution& a, const Solution& b){
-    //             return a.total_cost < b.total_cost;
-    //         });
+    int n_runs = 10;
+    for (int i = 1; i <= n_runs; ++i) {
+        vector<Solution> robust_pool = solveStochastic(instance, sa_params, ga_pool, result.best_ga, mc_samples, mc_k);
+
+        double current_cost = 0;
+        if (!robust_pool.empty()) {
+            // Sort to find best in this pool (using expected_cost from SA)
+            sort(robust_pool.begin(), robust_pool.end(), [](const Solution& a, const Solution& b){
+                return a.expected_cost < b.expected_cost;
+            });
             
-    //         Solution& best_run = robust_pool.front();
-    //         current_cost = best_run.total_cost;
+            Solution& best_run = robust_pool.front();
+            current_cost = best_run.expected_cost;
 
-    //         // Update Global Best
-    //         if (best_run.total_cost < best_of_all_runs.total_cost) {
-    //             best_of_all_runs = best_run;
-    //         }
-    //     } else {
-    //         // Fallback to deterministic if Stoch SA failed entirely
-    //         current_cost = result.stage2_det_sa.total_cost;
-    //     }
+            // Update Global Best
+            if (best_run.expected_cost < best_of_all_runs.expected_cost) {
+                best_of_all_runs = best_run;
+            }
+        } else {
+            current_cost = -1.0;
+        }
 
-    //     run_costs.push_back(current_cost);
+        run_costs.push_back(current_cost);
         
-    //     // Log to file
-    //     stringstream ss;
-    //     ss << i << "," << fixed << setprecision(2) << current_cost;
-    //     Writer::appendCSV(logFile, "", ss.str()); // Empty header since we created file above
-    // }
+        // Log to file
+        stringstream ss;
+        ss << i << "," << fixed << setprecision(2) << current_cost;
+        Writer::appendCSV(logFile, "", ss.str());
+    }
 
-    // // Finalize Stage 2 Results
-    // if (best_of_all_runs.total_cost == numeric_limits<double>::infinity()) {
-    //     result.stage2_stoch_sa = result.stage2_det_sa; // Fallback
-    // } else {
-    //     result.stage2_stoch_sa = best_of_all_runs;
-    // }
+    // Finalize Stage 2 Results
+    if (best_of_all_runs.expected_cost == numeric_limits<double>::infinity()) {
+        result.best_stoch_sa = result.best_ga; // Fallback
+    } else {
+        result.best_stoch_sa = best_of_all_runs;
+    }
 
-    // // Calculate Average
-    // double sum = accumulate(run_costs.begin(), run_costs.end(), 0.0);
-    // result.stage2_avg_cost = (run_costs.empty()) ? 0.0 : (sum / run_costs.size());
+    // Calculate Average
+    double sum = accumulate(run_costs.begin(), run_costs.end(), 0.0);
+    result.stoch_sa_avg_cost = (run_costs.empty()) ? 0.0 : (sum / run_costs.size());
 
-    // // Save the Best Stochastic Solution to file
-    // Writer::writeSolution(baseDir + "/solution_stage2_stoch_sa.txt", result.stage2_stoch_sa);
-    result.stoch_sa_time_ms = 0.0; // Placeholder since stage 2 is commented out
+    // Save the Best Stochastic Solution to file
+    Writer::writeSolution(baseDir + "/solution_stage2_stoch_sa.txt", result.best_stoch_sa, sa_params.seed);
+
     return result;
 }
 
@@ -160,8 +156,8 @@ void Solver::solveAllInDirectory(const string& dir_path, const GAParams& ga_para
             << (int)(result.best_ga.total_cost) << ","
             << fixed << setprecision(2) << ((result.best_ga.total_cost - 
                 literature_result) / literature_result * 100.0) << ","
-            << fixed << setprecision(2) << result.best_stoch_sa.total_cost << ","
-            << fixed << setprecision(2) << ((result.best_stoch_sa.total_cost - 
+            << fixed << setprecision(2) << result.best_stoch_sa.expected_cost << ","
+            << fixed << setprecision(2) << ((result.best_stoch_sa.expected_cost - 
                 literature_result) / literature_result * 100.0) << ","
             << fixed << setprecision(2) << result.ga_time_ms << ","
             << fixed << setprecision(2) << result.stoch_sa_time_ms;
@@ -199,18 +195,15 @@ pair<vector<Solution>, GaRunMetrics> Solver::solveDeterministic(const Instance& 
 vector<Solution> Solver::solveStochastic(const Instance& instance, const SAParams& sa_params, 
     const vector<Solution>& initialPool, const Solution& best_deter_sol, int mc_samples, int mc_k) 
 {
-    SAParams stoch_params = sa_params; 
-    stoch_params.iters_per_T = max(1, sa_params.iters_per_T / 5); 
-
-    SA sa(stoch_params);
+    SA sa(sa_params);
     vector<Solution> robust_pool;
 
     CostEstimator stoch_estimator = [&](const Instance& inst, const Solution& sol) -> double {
-        return MonteCarlo::expectedCost(inst, sol, best_deter_sol, mc_samples, mc_k, 42);
+        return MonteCarlo::expectedCost(inst, sol, best_deter_sol, mc_samples, mc_k, sa_params.seed);
     };
 
-    for (const auto& seed : initialPool) {
-        robust_pool.push_back(sa.refine(instance, seed, stoch_estimator));
+    for (const auto& sol : initialPool) {
+        robust_pool.push_back(sa.refine(instance, sol, stoch_estimator));
     }
     return robust_pool;
 }
