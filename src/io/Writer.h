@@ -2,6 +2,7 @@
 
 #include <string>
 #include "model/Solution.h"
+#include <map>
 
 using namespace std;
 
@@ -11,7 +12,7 @@ public:
     static void ensureDirectory(const string& path);
 
     // Write a human-readable solution summary to a text file.
-    static bool writeSolution(const string& path, const Solution& sol);
+    static bool writeSolution(const string& path, const Solution& sol, unsigned long long seed);
 
     // Convert solution to a string representation.
     static string solToString(const Solution& sol);

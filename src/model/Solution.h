@@ -10,10 +10,9 @@ struct Solution {
     // M: Number of Clients
     
     vector<bool> openFacilities; // Size N
-    
-    vector<pair<int, double>> assigned_facility; // Size M: (facility_index, allocation_cost)
+    vector<pair<int, long>> assigned_facility; // Size M: (facility_index, allocation_cost)
 
-    double total_cost;
+    long total_cost;
     int num_open_facilities; // Cached count of open facilities
 
     // Constructors

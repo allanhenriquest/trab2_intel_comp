@@ -133,11 +133,10 @@ void Solver::solveAllInDirectory(const string& dir_path, const GAParams& ga_para
     Writer::ensureDirectory("results");
     Writer::appendCSV("results/summary.csv", "Instance,Best,GA,GA_Gap(%),Stoch_SA,Stoch_SA_Gap(%),GA_Time(ms),Stoch_SA_Time(ms)", "");
 
-    ifstream best_literature("best_literature.txt");
-    string dummy;
-
     for (int i = 0; i < total; ++i) {
-        string f = files[i];
+        string file = files[i];
+        string instance_name = fs::path(file).stem().string();
+        cout << "instance_name: " << instance_name << endl;
         
         // Progress Bar
         float progress = (float)(i + 1) / total;
@@ -149,14 +148,14 @@ void Solver::solveAllInDirectory(const string& dir_path, const GAParams& ga_para
             else if (b == pos) cout << ">";
             else cout << " ";
         }
-        cout << "] " << int(progress * 100.0) << "% " << fs::path(f).filename().string() << "   ";
+        cout << "] " << int(progress * 100.0) << "% " << instance_name << "   ";
         cout.flush();
 
-        PipelineResult result = solveInstance(f, ga_params, sa_params, mc_samples, mc_k);
+        PipelineResult result = solveInstance(file, ga_params, sa_params, mc_samples, mc_k);
+        
         stringstream row;
-        int literature_result;
-        best_literature >> dummy >> literature_result; // Skip filename
-        row << fs::path(f).filename().string() << ","
+        int literature_result = BEST.at(instance_name);
+        row << instance_name << ","
             << literature_result << "," 
             << (int)(result.best_ga.total_cost) << ","
             << fixed << setprecision(2) << ((result.best_ga.total_cost - 
@@ -184,7 +183,7 @@ pair<vector<Solution>, GaRunMetrics> Solver::solveDeterministic(const Instance& 
     Writer::ensureDirectory(baseDir);
 
     if (!solutions.empty()) {
-        Writer::writeSolution(baseDir + "/solution_stage1_ga.txt", solutions.front());
+        Writer::writeSolution(baseDir + "/solution_stage1_ga.txt", solutions.front(), ga_params.seed);
     }
     
     for (const auto& gen : metrics.history) {

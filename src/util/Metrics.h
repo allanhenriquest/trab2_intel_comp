@@ -4,16 +4,22 @@
 
 using namespace std;
 
-struct GAParams {
+struct GAParams
+{
     int pop_size{100};
     int max_generations{300};
     int elite_k{10};
     double mutation_rate{0.5};
-    unsigned long long seed{42};
+    float open_threshold{50.0};   // Threshold for deciding when to open a facility
+    float stop_threshold{0.0001}; // Percentage improvement threshold for stopping
+    bool use_local_search{true};
+    bool use_smart_leader{true};
+    unsigned long long seed;
 };
-struct GaGeneration {
+struct GaGeneration
+{
     int generation_index;
-    double best_cost;
+    long best_cost;
     double avg_cost;
     long long time_total_ms;
     long long time_evolution_ms;
@@ -21,15 +27,17 @@ struct GaGeneration {
     int ls_improvements;
 };
 
-struct GaRunMetrics {
+struct GaRunMetrics
+{
     std::string instance_name;
     int n_facilities;
-    double final_cost;
+    long final_cost;
     long long total_time_ms;
     std::vector<GaGeneration> history;
 };
 
-struct SAParams {
+struct SAParams
+{
     double T0{1000.0};
     double Tmin{0.01};
     double alpha{0.95};

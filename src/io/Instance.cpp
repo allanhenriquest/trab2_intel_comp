@@ -46,7 +46,7 @@ Instance::Instance(const string& path, bool verbose) : filePath(path) {
 
     // Resize vectors
     opening_costs.resize(n);
-    allocation_costs.resize(n, vector<double>(m));
+    allocation_costs.resize(n, vector<long>(m));
 
     // Parse loop
     // Format: [FacilityIndex] [OpeningCost] [CostToClient1] ...
