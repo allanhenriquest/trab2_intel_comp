@@ -27,14 +27,15 @@ bool Writer::writeSolution(const string& path, const Solution& sol, unsigned lon
 
 string Writer::solToString(const Solution& sol, unsigned long long seed) {
     stringstream ss;
-    ss << "Total Cost: " << fixed << setprecision(2) << sol.total_cost << "\n";
-    ss << "Open Facilities (" << sol.openFacilities.size() << " total):\n";
+    ss << "Total cost: " << fixed << setprecision(2) << sol.total_cost << "\n";
+    ss << "Open facilities: "<< "\n";
     for (size_t i = 0; i < sol.openFacilities.size(); ++i) {
-        if (sol.openFacilities[i]) 
+        if (sol.openFacilities[i])
             ss << i << " ";
     }
     ss << "\n";
-    ss << "Random Seed: " << seed << "\n";
+    ss << "Number of open facilities: " << sol.num_open_facilities << "\n";
+    ss << "Random seed: " << seed << "\n";
     return ss.str();
 }
 

@@ -32,8 +32,7 @@ pair<vector<Solution>, GaRunMetrics> GA::run(const Instance& inst, int elite_k_o
     sort(population.begin(), population.end(), [](const Solution& a, const Solution& b) {
         return a.total_cost < b.total_cost;
     });
-
-    long old_cost = 0;
+    
     int convergence_counter = 0;
     for (int gen = 0; gen < params_.max_generations; ++gen) {
         GaGeneration gm;
@@ -47,12 +46,18 @@ pair<vector<Solution>, GaRunMetrics> GA::run(const Instance& inst, int elite_k_o
         gm.time_total_ms = gen_timer.elapsedMs();
         
         gm.best_cost = population[0].total_cost;
-        double sum = 0; for(const auto& s : population) sum += s.total_cost;
-        gm.avg_cost = sum / population.size();
+        double sum_cost = 0; 
+        int sum_open = 0;
+        for(const auto& s : population){
+            sum_cost += s.total_cost;
+            sum_open += s.num_open_facilities;
+        } 
+        gm.avg_cost = sum_cost / population.size();
+        gm.avg_open_facilities = sum_open / population.size();
         
         run_data.history.push_back(gm);
 
-        if(gen > 0 && (abs(gm.best_cost - old_cost)/(double)old_cost) < params_.stop_threshold)
+        if(gen > 0 && (abs((double)gm.best_cost - gm.avg_cost)/gm.avg_cost) < params_.stop_threshold)
             convergence_counter++;
         else
             convergence_counter = 0;
@@ -60,8 +65,6 @@ pair<vector<Solution>, GaRunMetrics> GA::run(const Instance& inst, int elite_k_o
         if(convergence_counter >= 10) {
             break;
         }
-
-        old_cost = gm.best_cost;
     }
 
     total_timer.stop();
@@ -216,41 +219,15 @@ void GA::nextGeneration(GaGeneration& current_metrics, bool use_local_search) {
             if (should_open) childreen[i].num_open_facilities++;
         }
         
-        // Mutation (Flip & Swap)
-        if (dist01(rng) < params_.mutation_rate) {
-            if (dist01(rng) < 0.5) {
-                // Flip
-                int idx = distN(rng);
-                if (childreen[i].openFacilities[idx]) {
-                    childreen[i].openFacilities[idx] = false;
+        // Mutation
+        for(int j=0; j<instance_.n; ++j) {
+            if(dist01(rng) < params_.mutation_rate) {
+                bool current_status = childreen[i].openFacilities[j];
+                childreen[i].openFacilities[j] = !current_status;
+                if (current_status)
                     childreen[i].num_open_facilities--;
-                } else {
-                    childreen[i].openFacilities[idx] = true;
+                else
                     childreen[i].num_open_facilities++;
-                }
-            } else {
-                // Swap
-                vector<int> openIndices, closedIndices;
-                openIndices.reserve(instance_.n);
-                closedIndices.reserve(instance_.n);
-                
-                for(int f=0; f<instance_.n; ++f) {
-                    if (childreen[i].openFacilities[f]) 
-                        openIndices.push_back(f);
-                    else 
-                        closedIndices.push_back(f);
-                }
-                if (!openIndices.empty() && !closedIndices.empty()) {
-                    uniform_int_distribution<int> randOpen(0, openIndices.size()-1);
-                    uniform_int_distribution<int> randClosed(0, closedIndices.size()-1);
-                    
-                    int f_open = openIndices[randOpen(rng)];
-                    int f_closed = closedIndices[randClosed(rng)];
-                    
-                    childreen[i].openFacilities[f_open] = false;
-                    childreen[i].openFacilities[f_closed] = true;
-                    // No change to num_open_facilities (swap keeps count same)
-                }
             }
         }
 
