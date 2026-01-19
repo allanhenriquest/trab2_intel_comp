@@ -280,19 +280,28 @@ vector<Solution> Solver::solveStochastic(const Instance &instance, const SAParam
     SA sa(sa_params);
     vector<Solution> robust_pool;
 
-    // Define Cost Function: Expected Cost via Monte Carlo
-    // CRITICAL PERFORMANCE TWEAK: Use 'mc_samples' (low value, e.g. 100) for the SA loop.
-    // This makes the search fast. We validate with high samples later in solveInstance.
     CostEstimator stoch_estimator = [&](const Instance &inst, const Solution &sol) -> double
     {
         return MonteCarlo::expectedCost(inst, sol, best_deter_sol, 
                                         sa_params.mc_samples, sa_params.mc_k, sa_params.seed);
     };
+    
+    // Obter nome da instância para o Writer
+    fs::path p(instance.filePath);
+    string instance_name = p.stem().string();
 
-    // Refine each solution in the elite pool independently
+    int run_id = 0;
     for (const auto &sol : initialPool)
     {
-        robust_pool.push_back(sa.refine(instance, sol, stoch_estimator));
+        // Chama refine e pega o par {Solução, Histórico}
+        auto result_pair = sa.refine(instance, sol, stoch_estimator);
+        
+        robust_pool.push_back(result_pair.first);
+        
+        // Salva o histórico desta execução específica
+        Writer::saveSaStats(instance_name, run_id, result_pair.second);
+        
+        run_id++;
     }
     return robust_pool;
 }

@@ -27,4 +27,6 @@ public:
     
     // Mantido para compatibilidade (se ainda for usado em algum lugar)
     static void saveGaStats(const std::string& instance_name, const GaRunMetrics& metrics, const std::string& subfolder = "");
+
+    static void saveSaStats(const std::string& instance_name, int run_id, const std::vector<SaStep>& history);
 };

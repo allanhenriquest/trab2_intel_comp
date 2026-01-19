@@ -3,20 +3,18 @@
 #include "io/Instance.h"
 #include <functional>
 #include <vector>
-#include "util/Metrics.h" // Assuming SAParams is defined here
+#include "util/Metrics.h" 
 
 using namespace std;
 
-// Alias for cost function: can be deterministic (Evaluator) or stochastic (MonteCarlo)
 using CostEstimator = function<double(const Instance&, const Solution&)>;
 
 class SA {
 public:
     explicit SA(SAParams params);
 
-    // Runs the Simulated Annealing process.
-    // 'seed' is the starting solution (usually from GA).
-    Solution refine(const Instance& inst, const Solution& initial_sol, const CostEstimator& estimator);
+    // Agora retorna a Solução Refinada E o Histórico da execução
+    pair<Solution, vector<SaStep>> refine(const Instance& inst, const Solution& initial_sol, const CostEstimator& estimator);
 
 private:
     SAParams params_;

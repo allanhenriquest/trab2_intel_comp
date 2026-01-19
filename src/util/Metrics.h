@@ -34,6 +34,15 @@ struct SAParams
 
     unsigned long long seed;
 };
+
+struct SaStep {
+    int iteration;
+    double temperature;
+    double current_cost; // 
+    double best_cost;
+    bool accepted;       // 
+};
+
 struct GaGeneration
 {
     int generation_index;

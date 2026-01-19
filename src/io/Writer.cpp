@@ -116,3 +116,23 @@ void Writer::saveGaStats(const std::string& instance_name, const GaRunMetrics& m
     // Redireciona para a nova lógica baseada em Instance Name se necessário
     // Mas como o Solver.cpp já faz a iteração manual, esta função pode ficar vazia ou ser removida no futuro.
 }
+
+void Writer::saveSaStats(const std::string& instance_name, int run_id, const std::vector<SaStep>& history) {
+    fs::path baseDir = fs::path("results") / instance_name;
+    ensureDirectory(baseDir.string());
+    
+    std::string filename = "history_sa_run" + std::to_string(run_id) + ".csv";
+    fs::path csvPath = baseDir / filename;
+    
+    std::ofstream out(csvPath);
+    if (!out.is_open()) return;
+    
+    out << "Iter,Temp,CurrentCost,BestCost,Accepted\n";
+    for (const auto& step : history) {
+        out << step.iteration << "," 
+            << step.temperature << ","
+            << step.current_cost << ","
+            << step.best_cost << ","
+            << step.accepted << "\n";
+    }
+}
