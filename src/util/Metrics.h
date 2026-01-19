@@ -14,6 +14,7 @@ struct GAParams
     double mutation_rate{0.001};
     float open_threshold{50.0};   // Threshold for deciding when to open a facility
     float stop_threshold{0.003}; // Percentage improvement threshold for stopping
+    int max_duplicates{100};
     bool use_local_search{true};
     bool use_smart_leader{true};
     unsigned long long seed;

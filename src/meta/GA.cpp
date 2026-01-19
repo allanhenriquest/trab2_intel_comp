@@ -97,7 +97,6 @@ void GA::initializePopulation(bool use_smart_leader, float open_threshold) {
             sol.ensureAtLeastOneOpen();
             sol.computeHash();
         } while(isDuplicate(sol));
-        seen_hashes.insert(sol.hash);
         population[i] = sol;
     }
 
@@ -107,7 +106,6 @@ void GA::initializePopulation(bool use_smart_leader, float open_threshold) {
         greedy.computeHash();
         if(!isDuplicate(greedy)){
             population[0] = greedy;
-            seen_hashes.insert(greedy.hash);
         }
     }
 }
@@ -203,7 +201,7 @@ void GA::nextGeneration(GaGeneration& current_metrics, bool use_local_search) {
     nextPop.reserve(params_.pop_size);
     for(int i=0; i<elites; ++i) {
         nextPop.insert(nextPop.end(), population[i]);
-        seen_hashes.insert(population[i].hash);
+        isDuplicate(population[i]);
     }
 
     int needed = params_.pop_size - elites;
@@ -264,7 +262,6 @@ void GA::nextGeneration(GaGeneration& current_metrics, bool use_local_search) {
             childreen[i].ensureAtLeastOneOpen();
             childreen[i].computeHash();
         }
-        seen_hashes.insert(childreen[i].hash);
     }
     
     #pragma omp parallel for
@@ -344,7 +341,7 @@ bool GA::optimizeSolution(Solution& sol, int seed_offset) {
             bool is_duplicate = false;
             #pragma omp critical
             {
-                is_duplicate = isDuplicate(temp_sol);
+                is_duplicate = isDuplicate(temp_sol, false);
             }
             
             if(is_duplicate)
@@ -368,7 +365,7 @@ bool GA::optimizeSolution(Solution& sol, int seed_offset) {
                 #pragma omp critical
                 {
                     seen_hashes.erase(sol.hash); // Remove old hash
-                    seen_hashes.insert(temp_sol.hash); // Add new hash
+                    isDuplicate(temp_sol);
                 }
                 
                 sol = temp_sol;
@@ -385,12 +382,21 @@ vector<Solution> GA::selectElite(int k) const {
     return result; 
 }
 
-bool GA::isDuplicate(Solution &sol)
+bool GA::isDuplicate(Solution &sol, bool insert_if_new)
 {
     if(sol.hash == 0)
         sol.computeHash();
 
-    if (seen_hashes.count(sol.hash)) 
-        return true;
-    return false;
+    if (seen_hashes.count(sol.hash)){
+        if(seen_hashes.at(sol.hash) + 1 > params_.max_duplicates)
+            return true;
+        else{
+            seen_hashes.at(sol.hash) += 1;
+            return false;
+        }
+    } else {
+        if(insert_if_new)
+            seen_hashes.insert({sol.hash, 1});
+        return false;
+    }
 }

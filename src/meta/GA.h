@@ -6,6 +6,7 @@
 #include "util/Metrics.h"
 #include <unordered_set>
 #include <cstdint>
+#include <unordered_map>
 
 using namespace std;
 using Hash = uint64_t;
@@ -19,7 +20,7 @@ private:
     GAParams params_;
     Instance instance_;
     vector<Solution> population;
-    unordered_set<Hash> seen_hashes;
+    unordered_map<Hash, int> seen_hashes;
 
     void initializePopulation(bool use_smart_leader, float open_threshold);
     void nextGeneration(GaGeneration& current_metrics, bool use_local_search);
@@ -31,5 +32,5 @@ private:
     void localSearch(vector<Solution>& childreen, GaGeneration& current_metrics, int needed);
     bool optimizeSolution(Solution& sol, int seed_offset); // <--- Updated Signature
     Solution generateGreedySolution();    // <--- NEW: Smart Initialization
-    bool isDuplicate(Solution &sol);
+    bool isDuplicate(Solution &sol, bool insert_if_new=true);
 };
