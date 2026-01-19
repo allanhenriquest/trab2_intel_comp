@@ -39,23 +39,29 @@ int main(int argc, char** argv) {
             PipelineResult res = Solver::solveInstance(path, ga_params, sa_params);
             string instance_name = filesystem::path(path).stem().string();
             long literature_result = BEST.at(instance_name);
-            double GA_gap = (res.best_ga.total_cost - literature_result) / (double)literature_result * 100.0;
+            double OBD_Gap = (res.OBD.total_cost - literature_result) / (double)literature_result * 100.0;
+            double OBD_S_Gap = (res.OBD_S - literature_result) / (double)literature_result * 100.0;
+            double OBS_Gap = (res.OBS.expected_cost - literature_result) / (double)literature_result * 100.0;
+
 
             cout << "\n--- Final Results ------------------------" << endl;
-            cout << left << setw(28) << "Stage" << "Cost" << endl;
+            cout << left << setw(8) << "Stage" << "Cost" << endl;
             cout << "------------------------------------------" << endl;
-            cout << left << setw(28) << "1. Genetic Algorithm (GA)"  << res.best_ga.total_cost << endl;
-            cout << left << setw(28) << "   - Literature Solution" << literature_result << endl;
-            cout << left << setw(28) << "   - gap(%)" << GA_gap << endl   ;
-            cout << left << setw(28) << "2. Stochastic SA (Best)" << res.best_stoch_sa.expected_cost << endl;
-            cout << left << setw(28) << "2. Stochastic SA (Avg)" << res.stoch_sa_avg_cost << endl;
+            cout << left << setw(8) << "BKS" << literature_result << endl;
+            cout << left << setw(8) << "OBD"  << res.OBD.total_cost << endl;
+            cout << left << setw(8) << "- gap(%)" << OBD_Gap << endl   ;
+            cout << left << setw(8) << "OBD_S" << res.OBD_S << endl;
+            cout << left << setw(8) << "- gap(%)" << OBD_S_Gap << endl   ;
+            cout << left << setw(8) << "OBS" << res.OBS.expected_cost << endl;
+            cout << left << setw(8) << "- gap(%)" << OBS_Gap << endl   ;
+            cout << left << setw(8) << "OAS" << res.OAS << endl;
             cout << "--- Times --------------------------------" << endl;
-            cout << left << setw(28) << "Stage" << "Time (ms)" << endl;
+            cout << left << setw(8) << "Stage" << "Time (ms)" << endl;
             cout << "------------------------------------------" << endl;
-            cout << left << setw(28) << "1. Genetic Algo (GA)" << res.ga_time_ms << endl;
-            cout << left << setw(28) << "2. Stochastic SA" << res.stoch_sa_time_ms << endl;
+            cout << left << setw(8) << "OBD_t" << res.OBD_t << endl;
+            cout << left << setw(8) << "OBS_t" << res.OBS_t << endl;
             cout << "------------------------------------------" << endl;
-            cout << left << setw(28) << "Seed" << ga_params.seed << endl;
+            cout << left << setw(8) << "Seed" << ga_params.seed << endl;
             cout << "Check results/ folder for logs." << endl;
         } 
         else if (mode == "-all") {

@@ -26,17 +26,17 @@ void Writer::ensureDirectory(const string& path) {
     }
 }
 
-bool Writer::writeSolution(const string& path, const Solution& sol, unsigned long long seed, bool stochastic) {
+bool Writer::writeSolution(const string& path, const Solution& sol, unsigned long long seed) {
     ofstream out(path);
     if (!out) return false;
-    out << solToString(sol, seed, stochastic);
+    out << solToString(sol, seed);
     return true;
 }
 
-string Writer::solToString(const Solution& sol, unsigned long long seed, bool stochastic) {
+string Writer::solToString(const Solution& sol, unsigned long long seed) {
     stringstream ss;
-    ss << "Total cost: " << fixed << setprecision(2) << 
-    (stochastic ? sol.expected_cost : sol.total_cost) << "\n";
+    ss << "Total cost: " << fixed << setprecision(2) << sol.total_cost << "\n";
+    ss << "Expected cost: " << fixed << setprecision(2) << sol.expected_cost << "\n";
     ss << "Open facilities: "<< "\n";
     for (size_t i = 0; i < sol.openFacilities.size(); ++i) {
         if (sol.openFacilities[i])
@@ -127,7 +127,6 @@ void Writer::saveParameters(const GAParams& ga_params, const SAParams& sa_params
 }
 
 void Writer::createChart(const string& instance_name) {
-    cout << "Creating chart..." << endl;
     if(!fs::exists("./venv"))
     {
         if(system("python3 -m venv venv") != 0)
@@ -146,5 +145,4 @@ void Writer::createChart(const string& instance_name) {
         cerr << "Error generating charts using Python script." << endl;
         return;
     }
-    cout << "Chart created successfully." << endl;
 }

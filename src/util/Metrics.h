@@ -6,7 +6,6 @@ using namespace std;
 
 struct GAParams
 {
-    bool test_mode{true};
     int pop_size{100};
     int max_generations{300};
     float elite_ratio{0.1};
@@ -16,6 +15,7 @@ struct GAParams
     float stop_threshold{0.0001}; // Percentage improvement threshold for stopping
     int max_convergence{20};
     int max_duplicates{5};
+    bool test_mode{true};
     bool use_local_search{true};
     bool use_smart_leader{true};
     unsigned long long seed;
@@ -23,9 +23,9 @@ struct GAParams
 
 struct SAParams
 {
-    bool solve{true};
+    bool solve{false};
     double T0{100.0};
-    double Tmin{1.0};
+    double Tmin{0.5};
     double alpha{0.95};
     int iters_per_T{5};
 

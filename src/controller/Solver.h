@@ -12,11 +12,12 @@ using namespace std;
 
 // Container for the results of all 3 stages
 struct PipelineResult {
-    Solution best_ga;       // Best found by Genetic Algorithm
-    double ga_time_ms; // Time taken by GA stage
-    Solution best_stoch_sa; // The single best solution found across all runs
-    double stoch_sa_avg_cost;   // The average cost of the solutions found in the 10 runs
-    double stoch_sa_time_ms; // Time taken by Stochastic SA stage
+    Solution OBD; // Our best deterministic solution from GA
+    double OBD_t; // Time taken by Deterministic GA stage
+    double OBD_S; // Our best deterministic solution simulated stochastically
+    Solution OBS; // Our best stochastic solution from SA
+    double OAS;   // The average expected cost over robust pool
+    double OBS_t; // Time taken by Stochastic SA stage
 };
 
 const map<string, long> BEST = {

@@ -7,6 +7,7 @@
 #include <limits>
 #include <numeric>
 #include <iostream>
+#include <unordered_set>
 
 
 // Global RNG for serial parts (Initialization, Selection, Crossover)
@@ -384,9 +385,24 @@ bool GA::optimizeSolution(Solution& sol, int seed_offset) {
     return overall_improvement;
 }
 
-vector<Solution> GA::selectElite(int k) const { 
+vector<Solution> GA::selectElite(int k) const 
+{ 
     vector<Solution> result;
-    for(int i=0; i < min((int)population.size(), k); ++i) result.push_back(population[i]);
+    unordered_set<Hash> selected_hashes;
+    int i = 0;
+    int count = 0;
+    while(count < k) {
+        Solution selected = population[i];
+        i++;
+        if(selected.hash == 0)
+            selected.computeHash();
+        if(selected_hashes.count(selected.hash))
+            continue;
+
+        result.push_back(selected);
+        selected_hashes.insert(selected.hash);
+        count++;
+    }
     return result; 
 }
 

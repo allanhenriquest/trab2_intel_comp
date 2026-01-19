@@ -34,9 +34,9 @@ PipelineResult Solver::solveInstance(const string &instance_path, const GAParams
     {
         cerr << "[CRITICAL ERROR] Instance failed to load (N=0). Aborting." << endl;
         PipelineResult fail;
-        fail.best_ga = Solution(0, 0);
-        fail.best_stoch_sa = Solution(0, 0);
-        fail.stoch_sa_avg_cost = 0.0;
+        fail.OBD = Solution(0, 0);
+        fail.OBS = Solution(0, 0);
+        fail.OAS = 0.0;
         return fail;
     }
 
@@ -47,16 +47,24 @@ PipelineResult Solver::solveInstance(const string &instance_path, const GAParams
     vector<Solution> &ga_pool = ga_res.first;
     GaRunMetrics &ga_metrics = ga_res.second;
 
-    result.ga_time_ms = ga_metrics.total_time_ms;
+    result.OBD_t = ga_metrics.total_time_ms;
 
     if (ga_pool.empty())
     {
-        result.best_ga = Solution(instance.n, instance.m);
-        result.best_stoch_sa = Solution(instance.n, instance.m);
-        result.stoch_sa_avg_cost = 0.0;
+        result.OBD = Solution(instance.n, instance.m);
+        result.OBS = Solution(instance.n, instance.m);
+        result.OAS = 0.0;
         return result;
     }
-    result.best_ga = ga_pool.front();
+    result.OBD = ga_pool.front();
+    result.OBD.expected_cost = MonteCarlo::expectedCost(instance, result.OBD, result.OBD, 
+                        100000, sa_params.mc_k, sa_params.seed);
+    result.OBD_S = result.OBD.expected_cost;
+
+    if (!ga_pool.empty())
+    {
+        Writer::writeSolution(baseDir + "/solution_stage1_ga.txt", result.OBD, ga_params.seed);
+    }
 
     // cout << "\n----- AG ELITE POOL -----\n";
     // for (int i=0; i< ga_pool.size(); ++i){
@@ -70,26 +78,26 @@ PipelineResult Solver::solveInstance(const string &instance_path, const GAParams
 
     if (!sa_params.solve)
     {
-        result.best_stoch_sa = result.best_ga;
-        result.stoch_sa_avg_cost = result.best_ga.total_cost;
-        result.stoch_sa_time_ms = 0.0;
+        result.OBS = Solution(instance.n, instance.m);
+        result.OAS = 0.0;
+        result.OBS_t = 0.0;
     }
     else
     {
         Writer::ensureDirectory(baseDir);
         Timer sa_timer;
         sa_timer.start();
-        vector<Solution> robust_pool = solveStochastic(instance, sa_params, ga_pool, result.best_ga);
+        vector<Solution> robust_pool = solveStochastic(instance, sa_params, ga_pool, result.OBD);
         sa_timer.stop();
-        result.stoch_sa_time_ms = sa_timer.elapsedMs();
+        result.OBS_t = sa_timer.elapsedMs();
 
         // Sort to find best in this pool (using expected_cost from SA)
         sort(robust_pool.begin(), robust_pool.end(), [](const Solution &a, const Solution &b)
              { return a.expected_cost < b.expected_cost; });
 
         Solution &best_sol = robust_pool.front();
-        result.best_stoch_sa = best_sol;
-        Writer::writeSolution(baseDir + "/solution_stage2_stoch_sa.txt", result.best_stoch_sa, sa_params.seed, true);
+        result.OBS = best_sol;
+        Writer::writeSolution(baseDir + "/solution_stage2_stoch_sa.txt", result.OBS, sa_params.seed);
 
         // Calculate Average
         double sum = 0.0;
@@ -97,7 +105,7 @@ PipelineResult Solver::solveInstance(const string &instance_path, const GAParams
             sum += sol.expected_cost;
             cout << "Solution Expected Cost: " << sol.expected_cost << endl;
         }
-        result.stoch_sa_avg_cost = sum / robust_pool.size();
+        result.OAS = sum / robust_pool.size();
     }
 
     Writer::saveParameters(ga_params, sa_params, baseDir + "/parameters.txt");
@@ -147,7 +155,7 @@ void Solver::solveAllInDirectory(const string &dir_path, const GAParams &ga_para
 
     Writer::ensureDirectory("results");
     Writer::cleanUpDirectory("results");
-    Writer::appendCSV("results/summary.csv", "Instance,Best,GA,GA_Gap(%),Stoch_SA,Stoch_SA_Gap(%),GA_Time(ms),Stoch_SA_Time(ms)", "");
+    Writer::appendCSV("results/summary.csv", "Instance,Best,OBD,OBD_Gap(%),OBD_S,OBD_S_Gap(%),OBS,OBS_Gap(%),OBD_t(ms),OBS_t(ms)", "");
 
     for (int i = 0; i < total; ++i)
     {
@@ -177,17 +185,20 @@ void Solver::solveAllInDirectory(const string &dir_path, const GAParams &ga_para
         stringstream row;
         int literature_result = BEST.at(instance_name);
 
-        double ga_gap = (result.best_ga.total_cost - literature_result) / (double)literature_result * 100.0;
-        double sa_gap = (result.best_stoch_sa.expected_cost - literature_result) / (double)literature_result * 100.0;
+        double OBD_gap = (result.OBD.total_cost - literature_result) / (double)literature_result * 100.0;
+        double OBD_S_gap = (result.OBD_S - literature_result) / (double)literature_result * 100.0;
+        double OBS_gap = (result.OBS.expected_cost - literature_result) / (double)literature_result * 100.0;
 
         row << instance_name << ","
             << literature_result << ","
-            << result.best_ga.total_cost << ","
-            << fixed << setprecision(2) << ga_gap << ","
-            << fixed << setprecision(2) << result.best_stoch_sa.expected_cost << ","
-            << fixed << setprecision(2) << sa_gap << ","
-            << fixed << setprecision(2) << result.ga_time_ms << ","
-            << fixed << setprecision(2) << result.stoch_sa_time_ms;
+            << result.OBD.total_cost << ","
+            << fixed << setprecision(2) << OBD_gap << ","
+            << fixed << setprecision(2) << result.OBD_S << ","
+            << fixed << setprecision(2) << OBD_S_gap << ","
+            << fixed << setprecision(2) << result.OBS.expected_cost << ","
+            << fixed << setprecision(2) << OBS_gap << ","
+            << fixed << setprecision(2) << result.OBD_t << ","
+            << fixed << setprecision(2) << result.OBS_t;
         Writer::appendCSV("results/summary.csv", "", row.str());
     }
     cout << endl
@@ -207,11 +218,6 @@ pair<vector<Solution>, GaRunMetrics> Solver::solveDeterministic(const Instance &
     Writer::cleanUpDirectory(baseDir);
     Writer::ensureDirectory("results");
     Writer::ensureDirectory(baseDir);
-
-    if (!solutions.empty())
-    {
-        Writer::writeSolution(baseDir + "/solution_stage1_ga.txt", solutions.front(), ga_params.seed, false);
-    }
 
     for (const auto &gen : metrics.history)
     {
