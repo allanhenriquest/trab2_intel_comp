@@ -1,74 +1,68 @@
 #include <iostream>
 #include <string>
-#include <iomanip>
-#include "controller/Solver.h"
+#include <vector>
 #include <filesystem>
-#include <random>
+#include "io/Instance.h"
+#include "controller/Solver.h"
 
-using namespace std;
+namespace fs = std::filesystem;
 
-void printUsage() {
-    cerr << "Usage:" << endl;
-    cerr << "  Single Instance: uflp -i <instance_path>" << endl;
-    cerr << "  Batch Directory: uflp -all <directory_path>" << endl;
-}
+int main(int argc, char* argv[]) {
+    std::string instance_path;
+    bool run_all = false;
+    std::string instances_dir;
+    
+    // Default configurations
+    bool ga_only = false;
+    bool use_ls = true;
+    bool use_sl = true;
 
-int main(int argc, char** argv) {
-    if (argc < 3) {
-        printUsage();
-        return 1;
+    // Parse Args
+    for (int i = 1; i < argc; ++i) {
+        std::string arg = argv[i];
+        if (arg == "-i" && i + 1 < argc) {
+            instance_path = argv[++i];
+        } else if (arg == "-all" && i + 1 < argc) {
+            run_all = true;
+            instances_dir = argv[++i];
+        } 
+        // New flags
+        else if (arg == "--ga-only") {
+            ga_only = true;
+        } else if (arg == "--ls" && i + 1 < argc) {
+            use_ls = (std::stoi(argv[++i]) == 1);
+        } else if (arg == "--sl" && i + 1 < argc) {
+            use_sl = (std::stoi(argv[++i]) == 1);
+        }
     }
 
-    string mode = argv[1];
-    string path = argv[2];
+    Solver solver;
+    // Configure solver with user choices
+    solver.configure(ga_only, use_ls, use_sl);
 
-    GAParams ga_params; 
-    random_device rd;
-    ga_params.seed = rd();
-
-    SAParams sa_params; 
-    random_device rd2;
-    sa_params.seed = rd2();
-
-    try {
-        if (mode == "-i") {
-            cout << "--- Single Instance Mode ---" << endl;
-            cout << "Target: " << path << endl;
-            
-            // Run Pipeline
-            PipelineResult res = Solver::solveInstance(path, ga_params, sa_params);
-            string instance_name = filesystem::path(path).stem().string();
-            long literature_result = BEST.at(instance_name);
-            double GA_gap = (res.best_ga.total_cost - literature_result) / (double)literature_result * 100.0;
-
-            cout << "\n--- Final Results ------------------------" << endl;
-            cout << left << setw(28) << "Stage" << "Cost" << endl;
-            cout << "------------------------------------------" << endl;
-            cout << left << setw(28) << "1. Genetic Algorithm (GA)"  << res.best_ga.total_cost << endl;
-            cout << left << setw(28) << "   - Literature Solution" << literature_result << endl;
-            cout << left << setw(28) << "   - gap(%)" << GA_gap << endl   ;
-            cout << left << setw(28) << "2. Stochastic SA (Best)" << res.best_stoch_sa.expected_cost << endl;
-            cout << left << setw(28) << "2. Stochastic SA (Avg)" << res.stoch_sa_avg_cost << endl;
-            cout << "--- Times --------------------------------" << endl;
-            cout << left << setw(28) << "Stage" << "Time (ms)" << endl;
-            cout << "------------------------------------------" << endl;
-            cout << left << setw(28) << "1. Genetic Algo (GA)" << res.ga_time_ms << endl;
-            cout << left << setw(28) << "2. Stochastic SA" << res.stoch_sa_time_ms << endl;
-            cout << "------------------------------------------" << endl;
-            cout << left << setw(28) << "Seed" << ga_params.seed << endl;
-            cout << "Check results/ folder for logs." << endl;
-        } 
-        else if (mode == "-all") {
-            cout << "--- Batch Directory Mode ---" << endl;
-            Solver::solveAllInDirectory(path, ga_params, sa_params);
-        } 
-        else {
-            printUsage();
+    if (run_all) {
+        if (!fs::exists(instances_dir)) {
+            std::cerr << "Error: Directory not found: " << instances_dir << std::endl;
             return 1;
         }
-    } catch (const exception& ex) {
-        cerr << "Error: " << ex.what() << endl;
-        return 2;
+        for (const auto& entry : fs::directory_iterator(instances_dir)) {
+             if (entry.path().extension() == ".txt" || entry.path().extension() == ".dat") {
+                 std::cout << "\n>>> Processing: " << entry.path().filename() << std::endl;
+                 try {
+                     Instance inst(entry.path().string());
+                     solver.solve(inst);
+                 } catch (const std::exception& e) {
+                     std::cerr << "Error: " << e.what() << std::endl;
+                 }
+             }
+        }
+    } else if (!instance_path.empty()) {
+        std::cout << ">>> Processing Single Instance: " << instance_path << std::endl;
+        Instance inst(instance_path);
+        solver.solve(inst);
+    } else {
+        std::cerr << "Usage: ./uflp -i <file> | -all <dir> [--ga-only] [--ls 0/1] [--sl 0/1]" << std::endl;
+        return 1;
     }
 
     return 0;

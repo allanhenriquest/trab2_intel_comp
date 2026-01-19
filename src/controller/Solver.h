@@ -1,25 +1,13 @@
 #pragma once
-
-#include "model/Solution.h"
 #include "io/Instance.h"
 #include "meta/GA.h"
 #include "meta/SA.h"
-#include <vector>
-#include <string>
+#include "io/Writer.h"
 #include <map>
+#include <string>
 
-using namespace std;
-
-// Container for the results of all 3 stages
-struct PipelineResult {
-    Solution best_ga;       // Best found by Genetic Algorithm
-    double ga_time_ms; // Time taken by GA stage
-    Solution best_stoch_sa; // The single best solution found across all runs
-    double stoch_sa_avg_cost;   // The average cost of the solutions found in the 10 runs
-    double stoch_sa_time_ms; // Time taken by Stochastic SA stage
-};
-
-const map<string, long> BEST = {
+// Known optimal values for MED instances (for gap calculation)
+inline const std::map<std::string, long> BEST = {
     {"500-10", 798577},
     {"500-100", 326790},
     {"500-1000", 99169},
@@ -37,19 +25,22 @@ const map<string, long> BEST = {
     {"2500-1000", 534405},
     {"3000-10", 3570766},
     {"3000-100", 1606969},
-    {"3000-1000", 643463}};
+    {"3000-1000", 643463}
+};
 
-class Solver
-{
+class Solver {
 public:
-    static PipelineResult solveInstance(const string& instance_path, const GAParams& ga_params,
-        const SAParams& sa_params);
-
-    static void solveAllInDirectory(const string& dir_path, const GAParams& ga_params,
-        const SAParams& sa_params);
+    Solver();
     
+    // Configures execution flags (set via CLI/Menu)
+    void configure(bool ga_only, bool use_ls, bool use_sl);
+    
+    // Main execution method
+    void solve(const Instance& instance);
+
 private:
-    static pair<vector<Solution>, GaRunMetrics> solveDeterministic(const Instance& instance, const GAParams& ga_params);
-    static vector<Solution> solveStochastic(const Instance& instance, 
-        const SAParams& sa_params, const vector<Solution>& initialPool, const Solution& best_deter_sol);
+    // Configuration State
+    bool ga_only_ = false;
+    bool use_ls_ = true;
+    bool use_sl_ = true;
 };

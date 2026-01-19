@@ -45,6 +45,10 @@ struct GaGeneration
     int ls_improvements;
     int avg_open_facilities;
     int duplicates;
+
+    // --- NOVOS CAMPOS PARA DIVERSIDADE ---
+    double cost_std_dev; // Desvio Padrão dos Custos (Diversidade Fenotípica)
+    double unique_ratio; // % de Indivíduos Únicos na População (Diversidade Genotípica)
 };
 
 struct GaRunMetrics
@@ -52,6 +56,7 @@ struct GaRunMetrics
     std::string instance_name;
     int n_facilities;
     long final_cost;
-    long long total_time_ms;
+    long total_time_ms;
     std::vector<GaGeneration> history;
+
 };

@@ -7,7 +7,7 @@
 #include <limits>
 #include <numeric>
 #include <iostream>
-
+#include <cmath> 
 
 // Global RNG for serial parts (Initialization, Selection, Crossover)
 static mt19937 rng;
@@ -17,6 +17,9 @@ GA::GA(GAParams params, Instance instance) : params_(params), instance_(instance
     seen_hashes.reserve(params.pop_size);
 }
 
+// ---------------------------------------------------------
+// MAIN EXECUTION LOOP WITH ADAPTIVE LOGIC
+// ---------------------------------------------------------
 pair<vector<Solution>, GaRunMetrics> GA::run(const Instance& inst) 
 {
     instance_ = inst;
@@ -24,30 +27,51 @@ pair<vector<Solution>, GaRunMetrics> GA::run(const Instance& inst)
     run_data.instance_name = inst.filePath;
     run_data.n_facilities = inst.n;
 
-    Timer total_timer;
-    total_timer.start();
+    Timer total_timer; total_timer.start();
 
-    initializePopulation(params_.use_smart_leader, params_.open_threshold);;
+    // 1. Initialize Population
+    initializePopulation(params_.use_smart_leader, params_.open_threshold);
     evaluatePopulation();
+    
+    // Sort initial population
     sort(population.begin(), population.end(), [](const Solution& a, const Solution& b) {
         return a.total_cost < b.total_cost;
     });
     
-    long old_cost = population[0].total_cost;
-    int convergence_counter = 0;
+    long global_best_cost = population[0].total_cost;
+    int stagnation_counter = 0;
+    
+    // Start with base mutation rate
+    double current_mutation_rate = params_.mutation_rate;
+
     for (int gen = 0; gen < params_.max_generations; ++gen) {
         GaGeneration gm;
         gm.generation_index = gen;
-        Timer gen_timer; 
-        gen_timer.start();
+        Timer gen_timer; gen_timer.start();
         
-        nextGeneration(gm, params_.use_local_search);
+        // --- ADAPTIVE CONTROL ---
+        // Check diversity from previous generation
+        double diversity_metric = 1.0; 
+        if (!run_data.history.empty()) {
+            diversity_metric = run_data.history.back().unique_ratio;
+        }
+
+        // If diversity is low (< 20% unique individuals), boost mutation aggressively
+        if (diversity_metric < 0.2) {
+            current_mutation_rate = min(0.10, params_.mutation_rate * 4.0); 
+        } else {
+            current_mutation_rate = params_.mutation_rate; // Reset to base rate
+        }
+
+        // --- EVOLUTION STEP ---
+        // We pass the dynamic mutation rate here
+        nextGeneration(gm, params_.use_local_search, current_mutation_rate);
 
         gen_timer.stop();
         gm.time_total_ms = gen_timer.elapsedMs();
-
         gm.best_cost = population[0].total_cost;
 
+        // --- STATISTICS CALCULATION ---
         double sum_cost = 0; 
         int sum_open = 0;
         for(const auto& s : population){
@@ -55,21 +79,60 @@ pair<vector<Solution>, GaRunMetrics> GA::run(const Instance& inst)
             sum_open += s.num_open_facilities;
         } 
         gm.avg_cost = sum_cost / population.size();
-        gm.avg_open_facilities = sum_open / population.size();
+        gm.avg_open_facilities = (double)sum_open / population.size();
+        
+        // Calculate Diversity (Standard Deviation of Costs)
+        double sum_sq_diff = 0.0;
+        for(const auto& s : population){
+            double diff = s.total_cost - gm.avg_cost;
+            sum_sq_diff += diff * diff;
+        }
+        gm.cost_std_dev = std::sqrt(sum_sq_diff / population.size());
+        
+        // Calculate Uniqueness Ratio
+        gm.unique_ratio = 1.0 - ((double)gm.duplicates / (double)params_.pop_size);
+        if(gm.unique_ratio < 0) gm.unique_ratio = 0;
         
         run_data.history.push_back(gm);
 
-        // if(gen > 0 && (abs((double)gm.best_cost - gm.avg_cost)/gm.avg_cost) < params_.stop_threshold)
-        if(abs((double)old_cost - gm.best_cost)/old_cost < params_.stop_threshold)
-            convergence_counter++;
-        else
-            convergence_counter = 0;
-
-        if(convergence_counter >= params_.max_convergence) {
-            break;
+        // --- STAGNATION CHECK ---
+        if (gm.best_cost < global_best_cost) {
+            global_best_cost = gm.best_cost;
+            stagnation_counter = 0;
+        } else {
+            stagnation_counter++;
         }
 
-        old_cost = gm.best_cost;
+        // --- CATACLYSM MECHANISM (Partial Restart) ---
+        // If no improvement for 30 generations, wipe out the bottom 50%
+        if (stagnation_counter > 30) {
+            int survivor_count = params_.pop_size / 2;
+            
+            // Keep the elite (top half), replace bottom half with new random solutions
+            uniform_real_distribution<double> dist(0.0, 1.0);
+            double p_open = max(0.02, params_.open_threshold / (double)instance_.n);
+
+            for (int i = survivor_count; i < params_.pop_size; ++i) {
+                Solution sol(instance_.n, instance_.m);
+                for (int j = 0; j < instance_.n; ++j) {
+                    if (dist(rng) < p_open) {
+                        sol.openFacilities[j] = true;
+                        sol.num_open_facilities++;
+                    }
+                }
+                sol.ensureAtLeastOneOpen();
+                sol.computeHash();
+                population[i] = sol; // Replace weak individual
+                Evaluator::evaluateFull(instance_, population[i]);
+            }
+            
+            // Re-sort population after cataclysm
+            sort(population.begin(), population.end(), [](const Solution& a, const Solution& b) {
+                return a.total_cost < b.total_cost;
+            });
+            
+            stagnation_counter = 0; // Reset counter
+        }
     }
 
     total_timer.stop();
@@ -135,7 +198,7 @@ Solution GA::generateGreedySolution() {
     sol.openFacilities[best_first] = true;
     Evaluator::evaluateFull(instance_, sol);
 
-    // Step 2: Iteratively add facilities
+    // Step 2: Iteratively add facilities (Hill Climbing Construction)
     bool improving = true;
     while(improving) {
         improving = false;
@@ -146,12 +209,12 @@ Solution GA::generateGreedySolution() {
         int local_best = -1;
         long local_cost = current_best_cost;
         
-        // #pragma omp parallel
+        #pragma omp parallel
         {
             int thread_best = -1;
             long thread_cost = current_best_cost;
             
-            // #pragma omp for nowait
+            #pragma omp for nowait
             for(int i=0; i<instance_.n; ++i) {
                 if(!sol.openFacilities[i]) {
                     long new_cost = sol.total_cost + Evaluator::delta(i, instance_, sol);
@@ -162,7 +225,7 @@ Solution GA::generateGreedySolution() {
                 }
             }
             
-            // #pragma omp critical
+            #pragma omp critical
             {
                 if (thread_best != -1 && thread_cost < local_cost) {
                     local_cost = thread_cost;
@@ -176,12 +239,9 @@ Solution GA::generateGreedySolution() {
             best_candidate = local_best;
         }
 
-        // #pragma omp critical
-        {
-            if (best_candidate != -1) {
-                Evaluator::openFacility(best_candidate, instance_, sol);
-                improving = true;
-            }
+        if (best_candidate != -1) {
+            Evaluator::openFacility(best_candidate, instance_, sol);
+            improving = true;
         }
     }
     return sol;
@@ -194,7 +254,10 @@ void GA::evaluatePopulation() {
     }
 }
 
-void GA::nextGeneration(GaGeneration& current_metrics, bool use_local_search) { 
+// ---------------------------------------------------------
+// EVOLUTION LOGIC
+// ---------------------------------------------------------
+void GA::nextGeneration(GaGeneration& current_metrics, bool use_local_search, double current_mutation_rate) { 
     Timer evo_timer; evo_timer.start();
 
     seen_hashes.clear();
@@ -203,11 +266,11 @@ void GA::nextGeneration(GaGeneration& current_metrics, bool use_local_search) {
     vector<Solution> nextPop;
     int elites = (int)(params_.elite_ratio * params_.pop_size);
     
-    // Elitism
+    // Elitism: Keep best solutions
     nextPop.reserve(params_.pop_size);
     for(int i=0; i<elites; ++i) {
         nextPop.insert(nextPop.end(), population[i]);
-        isDuplicate(population[i]);
+        isDuplicate(population[i]); 
     }
 
     int needed = params_.pop_size - elites;
@@ -215,11 +278,9 @@ void GA::nextGeneration(GaGeneration& current_metrics, bool use_local_search) {
     childreen.reserve(needed);
     
     uniform_int_distribution<int> distIdx(0, params_.pop_size - 1);
-    uniform_int_distribution<int> distN(0, instance_.n - 1);
     uniform_real_distribution<double> dist01(0.0, 1.0);
 
     for(int i=0; i<needed; ++i) {
-        // Create new child
         childreen.emplace_back(instance_.n, instance_.m);
         
         // Tournament Selection
@@ -233,43 +294,40 @@ void GA::nextGeneration(GaGeneration& current_metrics, bool use_local_search) {
 
         // Uniform Crossover
         for(int j=0; j<instance_.n; ++j) {
-            bool should_open = (dist01(rng) < 0.5) ? parent1.openFacilities[j] : parent2.openFacilities[j];
-            childreen[i].openFacilities[j] = should_open;
-            if (should_open) 
-                childreen[i].num_open_facilities++;
+            bool gene = (dist01(rng) < 0.5) ? parent1.openFacilities[j] : parent2.openFacilities[j];
+            childreen[i].openFacilities[j] = gene;
+            if (gene) childreen[i].num_open_facilities++;
         }
 
-        
-        // Mutation
+        // Adaptive Mutation
         for(int j=0; j<instance_.n; ++j) {
-            if(dist01(rng) < params_.mutation_rate) {
-                bool current_status = childreen[i].openFacilities[j];
-                childreen[i].openFacilities[j] = !current_status;
-                if (current_status)
-                    childreen[i].num_open_facilities--;
-                else
-                    childreen[i].num_open_facilities++;
+            if(dist01(rng) < current_mutation_rate) {
+                bool st = childreen[i].openFacilities[j];
+                childreen[i].openFacilities[j] = !st;
+                if (st) childreen[i].num_open_facilities--;
+                else childreen[i].num_open_facilities++;
             }
         }
 
         childreen[i].ensureAtLeastOneOpen();
-        
         childreen[i].computeHash();
-        // Ensure Uniqueness
-        while(isDuplicate(childreen[i])) {
-            // Flip a random facility
-            int flip_idx = distN(rng);
-            bool current_status = childreen[i].openFacilities[flip_idx];
-            childreen[i].openFacilities[flip_idx] = !current_status;
-            if (current_status)
-                childreen[i].num_open_facilities--;
-            else
-                childreen[i].num_open_facilities++;
-            childreen[i].ensureAtLeastOneOpen();
+        
+        // Handle Duplicates (Simple flip retry)
+        int attempts = 0;
+        while(isDuplicate(childreen[i]) && attempts < 3) {
+            uniform_int_distribution<int> distN(0, instance_.n - 1);
+            int idx = distN(rng);
+            bool st = childreen[i].openFacilities[idx];
+            childreen[i].openFacilities[idx] = !st;
+            if (st) childreen[i].num_open_facilities--;
+            else childreen[i].num_open_facilities++;
+            
             childreen[i].computeHash();
+            attempts++;
         }
     }
     
+    // Evaluate children (Parallel)
     #pragma omp parallel for
     for(int i=0; i<needed; ++i) {
         Evaluator::evaluateFull(instance_, childreen[i]);
@@ -278,6 +336,7 @@ void GA::nextGeneration(GaGeneration& current_metrics, bool use_local_search) {
     evo_timer.stop();
     current_metrics.time_evolution_ms = evo_timer.elapsedMs();
 
+    // Selective Local Search
     if(use_local_search){
         localSearch(childreen, current_metrics, needed);
     } else {
@@ -287,6 +346,7 @@ void GA::nextGeneration(GaGeneration& current_metrics, bool use_local_search) {
 
     current_metrics.duplicates = gen_duplicates;
 
+    // Generational Replacement
     nextPop.insert(nextPop.end(), childreen.begin(), childreen.end());
     population = nextPop;
     
@@ -302,11 +362,17 @@ void GA::localSearch(vector<Solution>& childreen, GaGeneration& current_metrics,
     
     #pragma omp parallel for reduction(+:improvements)
     for(int i=0; i<needed; ++i) {
-        // Unique Seed = Index + (Generation * LargeNumber)
-        int unique_seed_modifier = i + (current_metrics.generation_index * 10000);
-        
-        if (optimizeSolution(childreen[i], unique_seed_modifier)) {
-            improvements++;
+        // Deterministic Local RNG for thread-safety
+        mt19937 temp_rng(params_.seed + i + (current_metrics.generation_index * 999));
+        uniform_real_distribution<double> d(0.0, 1.0);
+
+        // SELECTIVE LS STRATEGY:
+        // Only apply LS to ~15% of the children to preserve diversity and speed.
+        if (d(temp_rng) < 0.15) { 
+            int unique_seed_modifier = i + (current_metrics.generation_index * 10000);
+            if (optimizeSolution(childreen[i], unique_seed_modifier)) {
+                improvements++;
+            }
         }
     }
     
@@ -315,12 +381,11 @@ void GA::localSearch(vector<Solution>& childreen, GaGeneration& current_metrics,
     current_metrics.ls_improvements = improvements;
 }
 
-// THREAD-SAFE LOCAL SEARCH
+// Thread-safe Local Search Implementation
 bool GA::optimizeSolution(Solution& sol, int seed_offset) {
     bool overall_improvement = false;
     bool improved_this_round = true;
     
-    // Initialize Local RNG for this thread/solution
     mt19937 local_rng(params_.seed + seed_offset);
 
     vector<int> indices(instance_.n);
@@ -329,7 +394,6 @@ bool GA::optimizeSolution(Solution& sol, int seed_offset) {
     while (improved_this_round) {
         improved_this_round = false;
         
-        // Use local_rng to shuffle deterministically
         shuffle(indices.begin(), indices.end(), local_rng);
 
         for (int facility : indices) {
@@ -338,45 +402,41 @@ bool GA::optimizeSolution(Solution& sol, int seed_offset) {
             if(was_open && sol.num_open_facilities <= 1)
                 continue; // Cannot close the last open facility
             
-            // Create neighbor solution (only for hash check)
+            // Create neighbor solution copy for hash check
             Solution temp_sol = sol;
             temp_sol.openFacilities[facility] = !was_open;
-            
-            // Compute hash for duplicate check (cheap operation)
             temp_sol.computeHash();
             
-            // Thread-safe duplicate check BEFORE expensive evaluation
+            // Thread-safe duplicate check
             bool is_duplicate = false;
             #pragma omp critical
             {
                 is_duplicate = isDuplicate(temp_sol, false);
             }
             
-            if(is_duplicate)
-                continue; // Skip duplicates before evaluation
+            if(is_duplicate) continue; 
             
-            temp_sol.openFacilities[facility] = was_open;
+            // Revert changes in temp_sol just to use Delta Evaluator efficiently on 'sol'
+            // Actually, we can just apply delta on 'sol'
+            
+            long delta_cost = Evaluator::delta(facility, instance_, sol);
+            
+            if (delta_cost < 0) {
+                // Apply improvement
+                if (was_open) Evaluator::closeFacility(facility, instance_, sol);
+                else Evaluator::openFacility(facility, instance_, sol);
 
-            // Now apply the expensive evaluation
-            if (was_open) {
-                Evaluator::closeFacility(facility, instance_, temp_sol);
-            } else {
-                Evaluator::openFacility(facility, instance_, temp_sol);
-            }
-
-            // Check if improved
-            if (temp_sol.total_cost < sol.total_cost) {
-                improved_this_round = true;
-                overall_improvement = true;
+                sol.computeHash();
                 
-                // Thread-safe hash update
+                // Update hash set
                 #pragma omp critical
                 {
-                    seen_hashes.erase(sol.hash); // Remove old hash
-                    isDuplicate(temp_sol);
+                    seen_hashes.erase(temp_sol.hash); // Remove old hash (approx)
+                    isDuplicate(sol);
                 }
                 
-                sol = temp_sol;
+                improved_this_round = true;
+                overall_improvement = true;
                 break; // Restart scan
             }
         }
