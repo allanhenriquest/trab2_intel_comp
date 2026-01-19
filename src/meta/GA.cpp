@@ -7,17 +7,18 @@
 #include <limits>
 #include <numeric>
 #include <iostream>
+#include <unordered_set>
 
-using namespace std;
 
 // Global RNG for serial parts (Initialization, Selection, Crossover)
 static mt19937 rng;
 
 GA::GA(GAParams params, Instance instance) : params_(params), instance_(instance) {
     rng.seed(params.seed);
+    seen_hashes.reserve(params.pop_size);
 }
 
-pair<vector<Solution>, GaRunMetrics> GA::run(const Instance& inst, int elite_k_override) 
+pair<vector<Solution>, GaRunMetrics> GA::run(const Instance& inst) 
 {
     instance_ = inst;
     GaRunMetrics run_data;
@@ -33,6 +34,7 @@ pair<vector<Solution>, GaRunMetrics> GA::run(const Instance& inst, int elite_k_o
         return a.total_cost < b.total_cost;
     });
     
+    long old_cost = population[0].total_cost;
     int convergence_counter = 0;
     for (int gen = 0; gen < params_.max_generations; ++gen) {
         GaGeneration gm;
@@ -44,8 +46,9 @@ pair<vector<Solution>, GaRunMetrics> GA::run(const Instance& inst, int elite_k_o
 
         gen_timer.stop();
         gm.time_total_ms = gen_timer.elapsedMs();
-        
+
         gm.best_cost = population[0].total_cost;
+
         double sum_cost = 0; 
         int sum_open = 0;
         for(const auto& s : population){
@@ -57,22 +60,24 @@ pair<vector<Solution>, GaRunMetrics> GA::run(const Instance& inst, int elite_k_o
         
         run_data.history.push_back(gm);
 
-        if(gen > 0 && (abs((double)gm.best_cost - gm.avg_cost)/gm.avg_cost) < params_.stop_threshold)
+        // if(gen > 0 && (abs((double)gm.best_cost - gm.avg_cost)/gm.avg_cost) < params_.stop_threshold)
+        if(abs((double)old_cost - gm.best_cost)/old_cost < params_.stop_threshold)
             convergence_counter++;
         else
             convergence_counter = 0;
 
-        if(convergence_counter >= 10) {
+        if(convergence_counter >= params_.max_convergence) {
             break;
         }
+
+        old_cost = gm.best_cost;
     }
 
     total_timer.stop();
     run_data.total_time_ms = total_timer.elapsedMs();
     run_data.final_cost = population[0].total_cost;
 
-    int k = (elite_k_override > 0) ? elite_k_override : params_.elite_k;
-    return {selectElite(k), run_data};
+    return {selectElite(params_.elite_count), run_data};
 }
 
 void GA::initializePopulation(bool use_smart_leader, float open_threshold) {
@@ -83,24 +88,30 @@ void GA::initializePopulation(bool use_smart_leader, float open_threshold) {
     population.resize(params_.pop_size);
 
     for (int i = 0; i < params_.pop_size; ++i)
-    {   
+    {
         Solution sol(instance_.n, instance_.m);
-        for (int j = 0; j < instance_.n; ++j)
-        {
-            if (dist(rng) < p_open)
+        do{
+            for (int j = 0; j < instance_.n; ++j)
             {
-                sol.openFacilities[j] = true;
-                sol.num_open_facilities++;
+                if (dist(rng) < p_open)
+                {
+                    sol.openFacilities[j] = true;
+                    sol.num_open_facilities++;
+                }
             }
-        }
-        sol.ensureAtLeastOneOpen();
+            sol.ensureAtLeastOneOpen();
+            sol.computeHash();
+        } while(isDuplicate(sol));
         population[i] = sol;
     }
 
     // Inject Greedy Solution (The "Smart Leader")
     if(use_smart_leader) {
         Solution greedy = generateGreedySolution();
-        population[0] = greedy;
+        greedy.computeHash();
+        if(!isDuplicate(greedy)){
+            population[0] = greedy;
+        }
     }
 }
 
@@ -136,12 +147,12 @@ Solution GA::generateGreedySolution() {
         int local_best = -1;
         long local_cost = current_best_cost;
         
-        #pragma omp parallel
+        // #pragma omp parallel
         {
             int thread_best = -1;
             long thread_cost = current_best_cost;
             
-            #pragma omp for nowait
+            // #pragma omp for nowait
             for(int i=0; i<instance_.n; ++i) {
                 if(!sol.openFacilities[i]) {
                     long new_cost = sol.total_cost + Evaluator::delta(i, instance_, sol);
@@ -152,7 +163,7 @@ Solution GA::generateGreedySolution() {
                 }
             }
             
-            #pragma omp critical
+            // #pragma omp critical
             {
                 if (thread_best != -1 && thread_cost < local_cost) {
                     local_cost = thread_cost;
@@ -166,9 +177,12 @@ Solution GA::generateGreedySolution() {
             best_candidate = local_best;
         }
 
-        if (best_candidate != -1) {
-            Evaluator::openFacility(best_candidate, instance_, sol);
-            improving = true;
+        // #pragma omp critical
+        {
+            if (best_candidate != -1) {
+                Evaluator::openFacility(best_candidate, instance_, sol);
+                improving = true;
+            }
         }
     }
     return sol;
@@ -184,12 +198,18 @@ void GA::evaluatePopulation() {
 void GA::nextGeneration(GaGeneration& current_metrics, bool use_local_search) { 
     Timer evo_timer; evo_timer.start();
 
+    seen_hashes.clear();
+    gen_duplicates = 0;
+
     vector<Solution> nextPop;
-    int elites = params_.elite_k;
+    int elites = (int)(params_.elite_ratio * params_.pop_size);
     
     // Elitism
     nextPop.reserve(params_.pop_size);
-    nextPop.insert(nextPop.end(), population.begin(), population.begin() + elites);
+    for(int i=0; i<elites; ++i) {
+        nextPop.insert(nextPop.end(), population[i]);
+        isDuplicate(population[i]);
+    }
 
     int needed = params_.pop_size - elites;
     vector<Solution> childreen;
@@ -216,8 +236,10 @@ void GA::nextGeneration(GaGeneration& current_metrics, bool use_local_search) {
         for(int j=0; j<instance_.n; ++j) {
             bool should_open = (dist01(rng) < 0.5) ? parent1.openFacilities[j] : parent2.openFacilities[j];
             childreen[i].openFacilities[j] = should_open;
-            if (should_open) childreen[i].num_open_facilities++;
+            if (should_open) 
+                childreen[i].num_open_facilities++;
         }
+
         
         // Mutation
         for(int j=0; j<instance_.n; ++j) {
@@ -232,6 +254,21 @@ void GA::nextGeneration(GaGeneration& current_metrics, bool use_local_search) {
         }
 
         childreen[i].ensureAtLeastOneOpen();
+        
+        childreen[i].computeHash();
+        // Ensure Uniqueness
+        while(isDuplicate(childreen[i])) {
+            // Flip a random facility
+            int flip_idx = distN(rng);
+            bool current_status = childreen[i].openFacilities[flip_idx];
+            childreen[i].openFacilities[flip_idx] = !current_status;
+            if (current_status)
+                childreen[i].num_open_facilities--;
+            else
+                childreen[i].num_open_facilities++;
+            childreen[i].ensureAtLeastOneOpen();
+            childreen[i].computeHash();
+        }
     }
     
     #pragma omp parallel for
@@ -248,6 +285,8 @@ void GA::nextGeneration(GaGeneration& current_metrics, bool use_local_search) {
         current_metrics.time_localsearch_ms = 0.0;
         current_metrics.ls_improvements = 0;
     }
+
+    current_metrics.duplicates = gen_duplicates;
 
     nextPop.insert(nextPop.end(), childreen.begin(), childreen.end());
     population = nextPop;
@@ -295,40 +334,95 @@ bool GA::optimizeSolution(Solution& sol, int seed_offset) {
         shuffle(indices.begin(), indices.end(), local_rng);
 
         for (int facility : indices) {
-            // Save state before modification (Otimização 2)
-            long old_cost = sol.total_cost;
             bool was_open = sol.openFacilities[facility];
-            vector<pair<int, long>> old_assignments = sol.assigned_facility;
             
-            if (sol.openFacilities[facility]) {
-                 // Try closing (using cached count)
-                 if (sol.num_open_facilities > 1) {
-                    Evaluator::closeFacility(facility, instance_, sol);
-                 } else {
-                    continue; 
-                 }
+            if(was_open && sol.num_open_facilities <= 1)
+                continue; // Cannot close the last open facility
+            
+            // Create neighbor solution (only for hash check)
+            Solution temp_sol = sol;
+            temp_sol.openFacilities[facility] = !was_open;
+            
+            // Compute hash for duplicate check (cheap operation)
+            temp_sol.computeHash();
+            
+            // Thread-safe duplicate check BEFORE expensive evaluation
+            bool is_duplicate = false;
+            #pragma omp critical
+            {
+                is_duplicate = isDuplicate(temp_sol, false);
+            }
+            
+            if(is_duplicate)
+                continue; // Skip duplicates before evaluation
+            
+            temp_sol.openFacilities[facility] = was_open;
+
+            // Now apply the expensive evaluation
+            if (was_open) {
+                Evaluator::closeFacility(facility, instance_, temp_sol);
             } else {
-                 // Try opening
-                 Evaluator::openFacility(facility, instance_, sol);
+                Evaluator::openFacility(facility, instance_, temp_sol);
             }
 
-            if (sol.total_cost < old_cost) {
+            // Check if improved
+            if (temp_sol.total_cost < sol.total_cost) {
                 improved_this_round = true;
                 overall_improvement = true;
+                
+                // Thread-safe hash update
+                #pragma omp critical
+                {
+                    seen_hashes.erase(sol.hash); // Remove old hash
+                    isDuplicate(temp_sol);
+                }
+                
+                sol = temp_sol;
                 break; // Restart scan
-            } else {
-                // Fast revert using saved state
-                sol.openFacilities[facility] = was_open;
-                sol.total_cost = old_cost;
-                sol.assigned_facility = old_assignments;
             }
         }
     }
     return overall_improvement;
 }
 
-vector<Solution> GA::selectElite(int k) const { 
+vector<Solution> GA::selectElite(int k) const 
+{ 
     vector<Solution> result;
-    for(int i=0; i < min((int)population.size(), k); ++i) result.push_back(population[i]);
+    unordered_set<Hash> selected_hashes;
+    int i = 0;
+    int count = 0;
+    while(count < k) {
+        Solution selected = population[i];
+        i++;
+        if(selected.hash == 0)
+            selected.computeHash();
+        if(selected_hashes.count(selected.hash))
+            continue;
+
+        result.push_back(selected);
+        selected_hashes.insert(selected.hash);
+        count++;
+    }
     return result; 
+}
+
+bool GA::isDuplicate(Solution &sol, bool insert_if_new)
+{
+    if(sol.hash == 0)
+        sol.computeHash();
+
+    if (seen_hashes.count(sol.hash)){
+        if(seen_hashes.at(sol.hash) + 1 > params_.max_duplicates){ 
+            gen_duplicates++;
+            return true;
+        }
+        else{
+            seen_hashes.at(sol.hash) += 1;
+            return false;
+        }
+    } else {
+        if(insert_if_new)
+            seen_hashes.insert({sol.hash, 1});
+        return false;
+    }
 }
