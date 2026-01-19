@@ -21,10 +21,13 @@ const vector<string> test_files = {
     "./instancias_MED/2500-10.txt", "./instancias_MED/2500-100.txt", "./instancias_MED/2500-1000.txt"};
 
 PipelineResult Solver::solveInstance(const string &instance_path, const GAParams &ga_params,
-                                     const SAParams &sa_params, int mc_samples, int mc_k)
+                                     const SAParams &sa_params)
 {
     // Load instance (verbose=true to see parsing errors)
     Instance instance(instance_path, true);
+    fs::path p(instance.filePath);
+    string instance_name = p.stem().string();
+    string baseDir = "results/" + instance_name;
 
     // SAFETY CHECK
     if (instance.n == 0)
@@ -55,6 +58,14 @@ PipelineResult Solver::solveInstance(const string &instance_path, const GAParams
     }
     result.best_ga = ga_pool.front();
 
+    // cout << "\n----- AG ELITE POOL -----\n";
+    // for (int i=0; i< ga_pool.size(); ++i){
+    //     cout << "Solution " << i << ": ";
+    //     cout << Writer::solToString(ga_pool[i], ga_params.seed, false); 
+    //     cout << endl;
+    // }
+    // cout << endl;
+
     // --- STAGE 2: Stochastic SA (10 Runs) ---
 
     if (!sa_params.solve)
@@ -62,78 +73,41 @@ PipelineResult Solver::solveInstance(const string &instance_path, const GAParams
         result.best_stoch_sa = result.best_ga;
         result.stoch_sa_avg_cost = result.best_ga.total_cost;
         result.stoch_sa_time_ms = 0.0;
-        return result;
     }
     else
     {
-        fs::path p(instance.filePath);
-        string baseDir = "results/" + p.stem().string();
         Writer::ensureDirectory(baseDir);
-        string logFile = baseDir + "/stochastic_log.csv";
+        Timer sa_timer;
+        sa_timer.start();
+        vector<Solution> robust_pool = solveStochastic(instance, sa_params, ga_pool, result.best_ga);
+        sa_timer.stop();
+        result.stoch_sa_time_ms = sa_timer.elapsedMs();
 
-        Writer::appendCSV(logFile, "Run,ExpectedCost", ""); // Create with header
+        // Sort to find best in this pool (using expected_cost from SA)
+        sort(robust_pool.begin(), robust_pool.end(), [](const Solution &a, const Solution &b)
+             { return a.expected_cost < b.expected_cost; });
 
-        vector<double> run_costs;
-        Solution best_of_all_runs;
-        best_of_all_runs.expected_cost = numeric_limits<double>::infinity();
-
-        int n_runs = 10;
-        for (int i = 1; i <= n_runs; ++i)
-        {
-            vector<Solution> robust_pool = solveStochastic(instance, sa_params, ga_pool, result.best_ga, mc_samples, mc_k);
-
-            double current_cost = 0;
-            if (!robust_pool.empty())
-            {
-                // Sort to find best in this pool (using expected_cost from SA)
-                sort(robust_pool.begin(), robust_pool.end(), [](const Solution &a, const Solution &b)
-                     { return a.expected_cost < b.expected_cost; });
-
-                Solution &best_run = robust_pool.front();
-                current_cost = best_run.expected_cost;
-
-                // Update Global Best
-                if (best_run.expected_cost < best_of_all_runs.expected_cost)
-                {
-                    best_of_all_runs = best_run;
-                }
-            }
-            else
-            {
-                current_cost = -1.0;
-            }
-
-            run_costs.push_back(current_cost);
-
-            // Log to file
-            stringstream ss;
-            ss << i << "," << fixed << setprecision(2) << current_cost;
-            Writer::appendCSV(logFile, "", ss.str());
-        }
-
-        // Finalize Stage 2 Results
-        if (best_of_all_runs.expected_cost == numeric_limits<double>::infinity())
-        {
-            result.best_stoch_sa = result.best_ga; // Fallback
-        }
-        else
-        {
-            result.best_stoch_sa = best_of_all_runs;
-        }
+        Solution &best_sol = robust_pool.front();
+        result.best_stoch_sa = best_sol;
+        Writer::writeSolution(baseDir + "/solution_stage2_stoch_sa.txt", result.best_stoch_sa, sa_params.seed, true);
 
         // Calculate Average
-        double sum = accumulate(run_costs.begin(), run_costs.end(), 0.0);
-        result.stoch_sa_avg_cost = (run_costs.empty()) ? 0.0 : (sum / run_costs.size());
-
-        // Save the Best Stochastic Solution to file
-        Writer::writeSolution(baseDir + "/solution_stage2_stoch_sa.txt", result.best_stoch_sa, sa_params.seed);
+        double sum = 0.0;
+        for (const auto &sol : robust_pool) {
+            sum += sol.expected_cost;
+            cout << "Solution Expected Cost: " << sol.expected_cost << endl;
+        }
+        result.stoch_sa_avg_cost = sum / robust_pool.size();
     }
+
+    Writer::saveParameters(ga_params, sa_params, baseDir + "/parameters.txt");
+    Writer::createChart(instance_name);
 
     return result;
 }
 
 void Solver::solveAllInDirectory(const string &dir_path, const GAParams &ga_params,
-                                 const SAParams &sa_params, int mc_samples, int mc_k)
+                                 const SAParams &sa_params)
 {
     vector<string> files;
 
@@ -198,7 +172,7 @@ void Solver::solveAllInDirectory(const string &dir_path, const GAParams &ga_para
         cout << "] " << int(progress * 100.0) << "% " << instance_name << "   ";
         cout.flush();
 
-        PipelineResult result = solveInstance(file, ga_params, sa_params, mc_samples, mc_k);
+        PipelineResult result = solveInstance(file, ga_params, sa_params);
 
         stringstream row;
         int literature_result = BEST.at(instance_name);
@@ -218,12 +192,13 @@ void Solver::solveAllInDirectory(const string &dir_path, const GAParams &ga_para
     }
     cout << endl
          << "Batch run complete. Check 'results/' folders." << endl;
+    Writer::createChart();
 }
 
 pair<vector<Solution>, GaRunMetrics> Solver::solveDeterministic(const Instance &instance, const GAParams &ga_params)
 {
     GA ga(ga_params, instance);
-    auto ga_res = ga.run(instance, ga_params.elite_k);
+    auto ga_res = ga.run(instance);
     vector<Solution> &solutions = ga_res.first;
     GaRunMetrics &metrics = ga_res.second;
 
@@ -235,7 +210,7 @@ pair<vector<Solution>, GaRunMetrics> Solver::solveDeterministic(const Instance &
 
     if (!solutions.empty())
     {
-        Writer::writeSolution(baseDir + "/solution_stage1_ga.txt", solutions.front(), ga_params.seed);
+        Writer::writeSolution(baseDir + "/solution_stage1_ga.txt", solutions.front(), ga_params.seed, false);
     }
 
     for (const auto &gen : metrics.history)
@@ -250,14 +225,14 @@ pair<vector<Solution>, GaRunMetrics> Solver::solveDeterministic(const Instance &
 }
 
 vector<Solution> Solver::solveStochastic(const Instance &instance, const SAParams &sa_params,
-                                         const vector<Solution> &initialPool, const Solution &best_deter_sol, int mc_samples, int mc_k)
+                                         const vector<Solution> &initialPool, const Solution &best_deter_sol)
 {
     SA sa(sa_params);
     vector<Solution> robust_pool;
 
     CostEstimator stoch_estimator = [&](const Instance &inst, const Solution &sol) -> double
     {
-        return MonteCarlo::expectedCost(inst, sol, best_deter_sol, mc_samples, mc_k, sa_params.seed);
+        return MonteCarlo::expectedCost(inst, sol, best_deter_sol, sa_params.mc_samples, sa_params.mc_k, sa_params.seed);
     };
 
     for (const auto &sol : initialPool)

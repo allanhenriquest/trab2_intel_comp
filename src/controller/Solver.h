@@ -19,7 +19,7 @@ struct PipelineResult {
     double stoch_sa_time_ms; // Time taken by Stochastic SA stage
 };
 
-const map<string, int> BEST = {
+const map<string, long> BEST = {
     {"500-10", 798577},
     {"500-100", 326790},
     {"500-1000", 99169},
@@ -43,13 +43,13 @@ class Solver
 {
 public:
     static PipelineResult solveInstance(const string& instance_path, const GAParams& ga_params,
-        const SAParams& sa_params, int mc_samples, int mc_k);
+        const SAParams& sa_params);
 
     static void solveAllInDirectory(const string& dir_path, const GAParams& ga_params,
-        const SAParams& sa_params, int mc_samples, int mc_k);
+        const SAParams& sa_params);
     
 private:
     static pair<vector<Solution>, GaRunMetrics> solveDeterministic(const Instance& instance, const GAParams& ga_params);
     static vector<Solution> solveStochastic(const Instance& instance, 
-        const SAParams& sa_params, const vector<Solution>& initialPool, const Solution& best_deter_sol, int mc_samples, int mc_k);
+        const SAParams& sa_params, const vector<Solution>& initialPool, const Solution& best_deter_sol);
 };

@@ -2,8 +2,10 @@
 #include <vector>
 #include <limits>
 #include <utility> // For pair
+#include <cstdint>
 
 using namespace std;
+using Hash = uint64_t;
 
 struct Solution {
     // N: Number of Facilities
@@ -15,11 +17,14 @@ struct Solution {
     long total_cost;              // Deterministic cost (used by GA)
     double expected_cost;         // Stochastic expected cost (used by SA with Monte Carlo)
     int num_open_facilities;      // Cached count of open facilities
+    Hash hash;                    // Cached hash for duplicate detection
+
 
     // Constructors
     Solution();
-    Solution(int n, int m); // UPDATED: Takes both N and M
+    Solution(int n, int m);
 
     // Helpers
     void ensureAtLeastOneOpen();
+    void computeHash();
 };

@@ -9,7 +9,8 @@ struct GAParams
     bool test_mode{true};
     int pop_size{100};
     int max_generations{300};
-    int elite_k{10};
+    float elite_ratio{0.1};
+    int elite_count{10};
     double mutation_rate{0.001};
     float open_threshold{50.0};   // Threshold for deciding when to open a facility
     float stop_threshold{0.003}; // Percentage improvement threshold for stopping
@@ -21,10 +22,14 @@ struct GAParams
 struct SAParams
 {
     bool solve{false};
-    double T0{1000.0};
-    double Tmin{0.01};
+    double T0{100.0};
+    double Tmin{1.0};
     double alpha{0.95};
-    int iters_per_T{20};
+    int iters_per_T{5};
+
+    int mc_samples{1000};
+    int mc_k{5};
+
     unsigned long long seed;
 };
 struct GaGeneration

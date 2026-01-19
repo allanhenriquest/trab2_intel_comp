@@ -29,9 +29,6 @@ int main(int argc, char** argv) {
     SAParams sa_params; 
     random_device rd2;
     sa_params.seed = rd2();
-    
-    int mc_samples = 100;
-    int mc_k = 5;
 
     try {
         if (mode == "-i") {
@@ -39,10 +36,10 @@ int main(int argc, char** argv) {
             cout << "Target: " << path << endl;
             
             // Run Pipeline
-            PipelineResult res = Solver::solveInstance(path, ga_params, sa_params, mc_samples, mc_k);
+            PipelineResult res = Solver::solveInstance(path, ga_params, sa_params);
             string instance_name = filesystem::path(path).stem().string();
-            double literature_result = BEST.at(instance_name);
-            double GA_gap = (res.best_ga.total_cost - literature_result) / literature_result * 100.0;
+            long literature_result = BEST.at(instance_name);
+            double GA_gap = (res.best_ga.total_cost - literature_result) / (double)literature_result * 100.0;
 
             cout << "\n--- Final Results ------------------------" << endl;
             cout << left << setw(28) << "Stage" << "Cost" << endl;
@@ -50,7 +47,7 @@ int main(int argc, char** argv) {
             cout << left << setw(28) << "1. Genetic Algorithm (GA)"  << res.best_ga.total_cost << endl;
             cout << left << setw(28) << "   - Literature Solution" << literature_result << endl;
             cout << left << setw(28) << "   - gap(%)" << GA_gap << endl   ;
-            cout << left << setw(28) << "2. Stochastic SA (Best)" << res.best_stoch_sa.total_cost << endl;
+            cout << left << setw(28) << "2. Stochastic SA (Best)" << res.best_stoch_sa.expected_cost << endl;
             cout << left << setw(28) << "2. Stochastic SA (Avg)" << res.stoch_sa_avg_cost << endl;
             cout << "--- Times --------------------------------" << endl;
             cout << left << setw(28) << "Stage" << "Time (ms)" << endl;
@@ -63,7 +60,7 @@ int main(int argc, char** argv) {
         } 
         else if (mode == "-all") {
             cout << "--- Batch Directory Mode ---" << endl;
-            Solver::solveAllInDirectory(path, ga_params, sa_params, mc_samples, mc_k);
+            Solver::solveAllInDirectory(path, ga_params, sa_params);
         } 
         else {
             printUsage();
