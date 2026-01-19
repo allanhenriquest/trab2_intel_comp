@@ -25,7 +25,7 @@ void Solution::computeHash()
     Hash h = 0;
 
     for (bool b : openFacilities) {          // ok: conversão implícita do proxy
-        h = (h << 1) ^ (Hash(b) * P);
+        h += (h << 1) ^ (Hash(b) * P);
     }
     hash = h;
 }

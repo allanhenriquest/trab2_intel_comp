@@ -33,6 +33,7 @@ pair<vector<Solution>, GaRunMetrics> GA::run(const Instance& inst)
         return a.total_cost < b.total_cost;
     });
     
+    long old_cost = population[0].total_cost;
     int convergence_counter = 0;
     for (int gen = 0; gen < params_.max_generations; ++gen) {
         GaGeneration gm;
@@ -58,14 +59,17 @@ pair<vector<Solution>, GaRunMetrics> GA::run(const Instance& inst)
         
         run_data.history.push_back(gm);
 
-        if(gen > 0 && (abs((double)gm.best_cost - gm.avg_cost)/gm.avg_cost) < params_.stop_threshold)
+        // if(gen > 0 && (abs((double)gm.best_cost - gm.avg_cost)/gm.avg_cost) < params_.stop_threshold)
+        if(abs((double)old_cost - gm.best_cost)/old_cost < params_.stop_threshold)
             convergence_counter++;
         else
             convergence_counter = 0;
 
-        if(convergence_counter >= 10) {
+        if(convergence_counter >= params_.max_convergence) {
             break;
         }
+
+        old_cost = gm.best_cost;
     }
 
     total_timer.stop();
@@ -193,8 +197,10 @@ void GA::evaluatePopulation() {
 void GA::nextGeneration(GaGeneration& current_metrics, bool use_local_search) { 
     Timer evo_timer; evo_timer.start();
 
-    vector<Solution> nextPop;
     seen_hashes.clear();
+    gen_duplicates = 0;
+
+    vector<Solution> nextPop;
     int elites = (int)(params_.elite_ratio * params_.pop_size);
     
     // Elitism
@@ -278,6 +284,8 @@ void GA::nextGeneration(GaGeneration& current_metrics, bool use_local_search) {
         current_metrics.time_localsearch_ms = 0.0;
         current_metrics.ls_improvements = 0;
     }
+
+    current_metrics.duplicates = gen_duplicates;
 
     nextPop.insert(nextPop.end(), childreen.begin(), childreen.end());
     population = nextPop;
@@ -388,8 +396,10 @@ bool GA::isDuplicate(Solution &sol, bool insert_if_new)
         sol.computeHash();
 
     if (seen_hashes.count(sol.hash)){
-        if(seen_hashes.at(sol.hash) + 1 > params_.max_duplicates)
+        if(seen_hashes.at(sol.hash) + 1 > params_.max_duplicates){ 
+            gen_duplicates++;
             return true;
+        }
         else{
             seen_hashes.at(sol.hash) += 1;
             return false;

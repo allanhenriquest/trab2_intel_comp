@@ -21,6 +21,7 @@ private:
     Instance instance_;
     vector<Solution> population;
     unordered_map<Hash, int> seen_hashes;
+    long long gen_duplicates{0};
 
     void initializePopulation(bool use_smart_leader, float open_threshold);
     void nextGeneration(GaGeneration& current_metrics, bool use_local_search);

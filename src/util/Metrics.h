@@ -13,8 +13,9 @@ struct GAParams
     int elite_count{10};
     double mutation_rate{0.001};
     float open_threshold{50.0};   // Threshold for deciding when to open a facility
-    float stop_threshold{0.003}; // Percentage improvement threshold for stopping
-    int max_duplicates{100};
+    float stop_threshold{0.0001}; // Percentage improvement threshold for stopping
+    int max_convergence{20};
+    int max_duplicates{5};
     bool use_local_search{true};
     bool use_smart_leader{true};
     unsigned long long seed;
@@ -22,7 +23,7 @@ struct GAParams
 
 struct SAParams
 {
-    bool solve{false};
+    bool solve{true};
     double T0{100.0};
     double Tmin{1.0};
     double alpha{0.95};
@@ -43,6 +44,7 @@ struct GaGeneration
     long long time_localsearch_ms;
     int ls_improvements;
     int avg_open_facilities;
+    int duplicates;
 };
 
 struct GaRunMetrics

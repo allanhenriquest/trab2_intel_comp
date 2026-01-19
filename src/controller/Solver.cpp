@@ -217,8 +217,9 @@ pair<vector<Solution>, GaRunMetrics> Solver::solveDeterministic(const Instance &
     {
         stringstream row;
         row << gen.generation_index << "," << gen.best_cost << "," << gen.avg_cost << ","
-            << gen.time_total_ms << "," << gen.ls_improvements << "," << gen.avg_open_facilities;
-        Writer::appendCSV(baseDir + "/history_ga.csv", "Gen,Best,Avg,Time,Improv,Open", row.str());
+            << gen.time_total_ms << "," << gen.ls_improvements << "," 
+            << gen.avg_open_facilities << "," << gen.duplicates;
+        Writer::appendCSV(baseDir + "/history_ga.csv", "Gen,Best,Avg,Time,Improv,Open,Duplicates", row.str());
     }
 
     return pair(solutions, metrics);

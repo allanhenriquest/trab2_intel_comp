@@ -98,6 +98,8 @@ void Writer::saveParameters(const GAParams& ga_params, const SAParams& sa_params
     ss << left << setw(20) << "Mutation Rate: " << ga_params.mutation_rate << "\n";
     ss << left << setw(20) << "Open Threshold: " << ga_params.open_threshold << "\n";
     ss << left << setw(20) << "Stop Threshold: " << ga_params.stop_threshold << "\n";
+    ss << left << setw(20) << "Max convergence: " << ga_params.max_convergence << "\n";
+    ss << left << setw(20) << "Max duplicates: " << ga_params.max_duplicates << "\n";
     ss << left << setw(20) << "Use Local Search: " << (ga_params.use_local_search ? "True" : "False") << "\n";
     ss << left << setw(20) << "Use Smart Leader: " << (ga_params.use_smart_leader ? "True" : "False") << "\n";
     ss << left << setw(20) <<"Random Seed: " << ga_params.seed << "\n";
