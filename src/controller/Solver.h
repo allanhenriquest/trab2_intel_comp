@@ -1,13 +1,29 @@
 #pragma once
+
+#include "model/Solution.h"
 #include "io/Instance.h"
 #include "meta/GA.h"
 #include "meta/SA.h"
-#include "io/Writer.h"
-#include <map>
+#include <vector>
 #include <string>
+#include <map>
 
-// Known optimal values for MED instances (for gap calculation)
-inline const std::map<std::string, long> BEST = {
+using namespace std;
+
+// Container for the results of all 3 stages (Full Pipeline)
+struct PipelineResult {
+    Solution OBD; // Best Deterministic solution (from GA)
+    double OBD_t; // Time taken by GA stage (ms)
+    
+    double OBD_S; // Expected Cost of OBD (via Monte Carlo Simulation)
+    
+    Solution OBS; // Best Stochastic solution (from SA)
+    double OAS;   // Average Expected Cost of the robust pool
+    double OBS_t; // Time taken by SA stage (ms)
+};
+
+// Known optimal values for MED instances (for Gap calculation)
+const map<string, long> BEST = {
     {"500-10", 798577},
     {"500-100", 326790},
     {"500-1000", 99169},
@@ -28,19 +44,22 @@ inline const std::map<std::string, long> BEST = {
     {"3000-1000", 643463}
 };
 
-class Solver {
+class Solver
+{
 public:
-    Solver();
-    
-    // Configures execution flags (set via CLI/Menu)
-    void configure(bool ga_only, bool use_ls, bool use_sl);
-    
-    // Main execution method
-    void solve(const Instance& instance);
+    // Solves a single instance running the full pipeline: GA -> Monte Carlo -> SA
+    static PipelineResult solveInstance(const string& instance_path, const GAParams& ga_params,
+        const SAParams& sa_params);
 
+    // Batch processes an entire directory, generating summary CSVs and charts
+    static void solveAllInDirectory(const string& dir_path, const GAParams& ga_params,
+        const SAParams& sa_params);
+    
 private:
-    // Configuration State
-    bool ga_only_ = false;
-    bool use_ls_ = true;
-    bool use_sl_ = true;
+    // Helper: Runs the GA (Deterministic Stage)
+    static pair<vector<Solution>, GaRunMetrics> solveDeterministic(const Instance& instance, const GAParams& ga_params);
+    
+    // Helper: Runs the SA (Stochastic Stage) starting from GA solutions
+    static vector<Solution> solveStochastic(const Instance& instance, 
+        const SAParams& sa_params, const vector<Solution>& initialPool, const Solution& best_deter_sol);
 };
