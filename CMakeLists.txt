@@ -5,6 +5,9 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# FIX: Find and link OpenMP
+find_package(OpenMP REQUIRED)
+
 file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS
     src/*.cpp
 )
@@ -12,3 +15,5 @@ file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS
 add_executable(uflp ${SOURCES})
 
 target_include_directories(uflp PRIVATE src)
+# FIX: Link OpenMP to the target
+target_link_libraries(uflp PRIVATE OpenMP::OpenMP_CXX)

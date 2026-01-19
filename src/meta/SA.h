@@ -1,27 +1,23 @@
 #pragma once
-
-#include <functional>
-#include "io/Instance.h"
 #include "model/Solution.h"
+#include "io/Instance.h"
+#include <functional>
+#include <vector>
+#include "util/Metrics.h" // Assuming SAParams is defined here
 
 using namespace std;
+
+// Alias for cost function: can be deterministic (Evaluator) or stochastic (MonteCarlo)
 using CostEstimator = function<double(const Instance&, const Solution&)>;
 
-struct SAParams {
-    double T0{1.0};
-    double alpha{0.95};
-    int iters_per_T{1000};
-    double Tmin{1e-3};
-    unsigned long long seed{42};
-};
-
-// Simulated Annealing for the stochastic refinement phase.
 class SA {
 public:
     explicit SA(SAParams params);
 
-    // Refine a given seed solution using the provided cost estimator (e.g., Monte Carlo).
-    Solution refine(const Instance& inst, const Solution& seed, const CostEstimator& estimator);
+    // Runs the Simulated Annealing process.
+    // 'seed' is the starting solution (usually from GA).
+    // 'estimator' is the cost function (in Phase 2, this will be the MonteCarlo simulation).
+    Solution refine(const Instance& inst, const Solution& initial_sol, const CostEstimator& estimator);
 
 private:
     SAParams params_;

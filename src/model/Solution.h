@@ -1,22 +1,25 @@
 #pragma once
-
 #include <vector>
+#include <limits>
+#include <utility> // For pair
 
 using namespace std;
 
-// Represents a solution to UFLP.
-// Attributes:
-// - y: binary vector of open facilities (size n)
-// - assigned_facility: for each client j, the assigned facility i and its cost (size n)
-// - total_cost: total objective value (fixed + serving)
 struct Solution {
-    vector<bool> openFacilities; // size n
-    vector<pair<int, double>> assigned_facility; // size n
-    double total_cost;
-    unsigned long long seed{42};
+    // N: Number of Facilities
+    // M: Number of Clients
+    
+    vector<bool> openFacilities; // Size N
+    vector<pair<int, long>> assigned_facility; // Size M: (facility_index, allocation_cost)
 
-    Solution(int n);
+    long total_cost;              // Deterministic cost (used by GA)
+    double expected_cost;         // Stochastic expected cost (used by SA with Monte Carlo)
+    int num_open_facilities;      // Cached count of open facilities
 
-    // Ensure at least one facility is open; if none, open a default one (e.g., 0).
+    // Constructors
+    Solution();
+    Solution(int n, int m); // UPDATED: Takes both N and M
+
+    // Helpers
     void ensureAtLeastOneOpen();
 };

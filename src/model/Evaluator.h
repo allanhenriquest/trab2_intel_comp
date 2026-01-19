@@ -16,4 +16,6 @@ public:
 
     // Close facility k; reassign affected clients and update total cost in O(n).
     static void closeFacility(int k, const Instance& inst, Solution& sol);
+
+    static long delta(int facility, const Instance& inst, const Solution& sol);
 };

@@ -1,37 +1,30 @@
 #pragma once
-
-#include <vector>
-#include <functional>
 #include "io/Instance.h"
 #include "model/Solution.h"
+#include <vector>
+#include <utility>
+#include "util/Metrics.h"
 
-using namespace std;
-
-struct GAParams {
-    int pop_size{50};
-    int max_generations{200};
-    double crossover_rate{0.8};
-    double mutation_rate{0.02};
-    int elite_k{5};
-    unsigned long long seed{42};
-};
-
-// Genetic Algorithm for deterministic phase (chromosome = y vector).
 class GA {
 public:
-    explicit GA(GAParams params, Instance instance);
+    GA(GAParams params, Instance instance);
 
-    // Run GA and return top-k elite solutions evaluated deterministically.
-    vector<Solution> run(const Instance& inst, int elite_k_override = -1);
+    std::pair<std::vector<Solution>, GaRunMetrics> run(const Instance& inst, 
+        int elite_k_override=-1);
 
 private:
     GAParams params_;
     Instance instance_;
-    vector<Solution> population;
+    std::vector<Solution> population;
 
-    // Internal helpers
-    void initializePopulation();
+    void initializePopulation(bool use_smart_leader, float open_threshold);
+    void nextGeneration(GaGeneration& current_metrics, bool use_local_search);
     void evaluatePopulation();
-    void nextGeneration();
-    vector<Solution> selectElite(int k) const;
+    std::vector<Solution> selectElite(int k) const;
+    
+    
+    // Core Helpers
+    void localSearch(std::vector<Solution>& childreen, GaGeneration& current_metrics, int needed);
+    bool optimizeSolution(Solution& sol, int seed_offset); // <--- Updated Signature
+    Solution generateGreedySolution();    // <--- NEW: Smart Initialization
 };
