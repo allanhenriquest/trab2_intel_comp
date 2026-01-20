@@ -55,6 +55,7 @@ public:
     static void solveAllInDirectory(const string& dir_path, const GAParams& ga_params,
         const SAParams& sa_params);
     
+    void runStatisticalAnalysis(const std::string &dir_path, const GAParams &ga_params, const SAParams &sa_params, int runs);
 private:
     // Helper: Runs the GA (Deterministic Stage)
     static pair<vector<Solution>, GaRunMetrics> solveDeterministic(const Instance& instance, const GAParams& ga_params);

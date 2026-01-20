@@ -14,6 +14,7 @@ void printUsage() {
               << "Options:\n"
               << "  -i <file>        Run single instance\n"
               << "  -all <dir>       Run all instances in directory\n"
+              << "  --stats          Run Statistical Analysis (30 runs per instance)\n"
               << "  --ga-only        Disable SA stage (Deterministic only)\n"
               << "  --ls <0/1>       Enable/Disable Local Search (Default: 1)\n"
               << "  --sl <0/1>       Enable/Disable Smart Leader (Default: 1)\n"
@@ -27,6 +28,8 @@ int main(int argc, char* argv[]) {
     std::string instance_path;
     std::string instances_dir;
     bool run_all = false;
+    bool run_stats = false; // NOVA FLAG
+    int stats_runs = 30;    // Padrão de 30 execuções
     
     // Default Parameters
     GAParams ga_params;
@@ -43,10 +46,15 @@ int main(int argc, char* argv[]) {
         std::string arg = argv[i];
         if (arg == "-i" && i + 1 < argc) {
             instance_path = argv[++i];
-        } else if (arg == "-all" && i + 1 < argc) {
+        } 
+        else if (arg == "-all" && i + 1 < argc) {
             run_all = true;
             instances_dir = argv[++i];
         } 
+        else if (arg == "--stats") { // NOVA OPÇÃO
+            run_stats = true;
+            run_all = true; // Stats implica rodar num diretório
+        }
         else if (arg == "--ga-only") {
             sa_params.solve = false;
         } 
@@ -78,27 +86,49 @@ int main(int argc, char* argv[]) {
 
     Solver solver;
 
-    if (run_all) {
+    // LÓGICA DE EXECUÇÃO
+    if (run_stats) {
+        // MODO ESTATÍSTICO (30 Runs)
+        if (instances_dir.empty()) {
+            // Se o usuário não passou -all <dir> antes de --stats, tenta assumir default ou erro
+            // O ideal é passar: ./uflp -all instancias_MED --stats
+             if (!fs::exists(instances_dir)) {
+                std::cerr << "Error: Directory needed for stats mode. Use: -all <dir> --stats" << std::endl;
+                return 1;
+            }
+        }
+        
+        if (!fs::exists(instances_dir)) {
+            std::cerr << "Error: Directory not found: " << instances_dir << std::endl;
+            return 1;
+        }
+        
+        // Chama o novo método estatístico
+        solver.runStatisticalAnalysis(instances_dir, ga_params, sa_params, stats_runs);
+    } 
+    else if (run_all) {
+        // MODO BATCH NORMAL (1 Run)
         if (!fs::exists(instances_dir)) {
             std::cerr << "Error: Directory not found: " << instances_dir << std::endl;
             return 1;
         }
         solver.solveAllInDirectory(instances_dir, ga_params, sa_params);
-    } else if (!instance_path.empty()) {
+    } 
+    else if (!instance_path.empty()) {
+        // MODO SINGLE INSTANCE
         std::cout << ">>> Processing Single Instance: " << instance_path << " (k=" << sa_params.mc_k << ")" << std::endl;
         PipelineResult res = solver.solveInstance(instance_path, ga_params, sa_params);
         
         std::cout << "Final Results:\n";
         
-        // --- FORMATAÇÃO VISUAL PARA TERMINAL (Truncado/Inteiro) ---
-        std::cout << std::fixed << std::setprecision(0); // Sem casas decimais, sem notação científica
+        // Formatação visual
+        std::cout << std::fixed << std::setprecision(0); 
         
         std::cout << "  OBD (Deterministic): " << (double)res.OBD.total_cost << "\n";
         std::cout << "  OBD Expected (k=" << sa_params.mc_k << "): " << res.OBD_S << "\n";
         if(sa_params.solve)
             std::cout << "  OBS (Stochastic, k=" << sa_params.mc_k << "): " << res.OBS.expected_cost << "\n";
             
-        // Restaura padrão (opcional)
         std::cout.unsetf(std::ios_base::fixed);
             
     } else {

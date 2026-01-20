@@ -17,6 +17,7 @@ else
     echo "  2) GA Analysis Only (Interactive Params)"
     echo "  3) STRATEGY COMPARISON (Batch: LS vs SL vs None)"
     echo "  4) PAPER BENCHMARK (Replicate Table 6 & Boxplots)"
+    echo "  5) STATISTICAL ROBUSTNESS (30 Runs Analysis)" # <--- NOVA OPÇÃO
     read -p "Option: " MODE_OPT
 fi
 
@@ -26,10 +27,17 @@ LS_FLAG=""
 SL_FLAG=""
 BATCH_STRATEGY="false"
 PAPER_BENCHMARK="false"
+STATS_FLAG="false" # <--- NOVA FLAG
 RUN_SINGLE="false"
 
 # Lógica de Seleção
-if [[ "$MODE_OPT" == "4" ]]; then
+if [[ "$MODE_OPT" == "5" ]]; then
+    echo -e "\n[STATISTICAL MODE SELECTED]"
+    echo "Running 30 executions per instance to analyze variance and robustness."
+    echo "This may take a long time."
+    STATS_FLAG="true"
+
+elif [[ "$MODE_OPT" == "4" ]]; then
     echo -e "\n[PAPER BENCHMARK SELECTED]"
     echo "This will run the experiment loop (k=5, 10, 20) to replicate paper results."
     PAPER_BENCHMARK="true"
@@ -41,103 +49,84 @@ elif [[ "$MODE_OPT" == "3" ]]; then
 
 elif [[ "$MODE_OPT" == "2" ]]; then
     GA_ONLY_FLAG="--ga-only"
-    echo -e "\n[GA CONFIGURATION]"
+    echo -e "\n[GA ANALYSIS SELECTED]"
+    echo "Parameters for Genetic Algorithm:"
+    read -p "  Use Local Search? (0/1) [1]: " LS_IN
+    LS_IN=${LS_IN:-1}
+    read -p "  Use Smart Leader? (0/1) [1]: " SL_IN
+    SL_IN=${SL_IN:-1}
     
-    # 2. Local Search
-    read -p "  > Enable Local Search in GA? (y/n): " ls_opt
-    if [[ "$ls_opt" == "y" || "$ls_opt" == "Y" ]]; then
-        LS_FLAG="--ls 1"
-    else
-        LS_FLAG="--ls 0"
+    LS_FLAG="--ls $LS_IN"
+    SL_FLAG="--sl $SL_IN"
+    
+    if [[ -z "${SINGLE_FILE-}" ]]; then
+        RUN_SINGLE="true" # Vai perguntar arquivo depois
     fi
-
-    # 3. Smart Leader
-    read -p "  > Enable Smart Leader? (y/n): " sl_opt
-    if [[ "$sl_opt" == "y" || "$sl_opt" == "Y" ]]; then
-        SL_FLAG="--sl 1"
-    else
-        SL_FLAG="--sl 0"
-    fi
-    RUN_SINGLE="true"
 
 elif [[ "$MODE_OPT" == "1" ]]; then
-    echo -e "\n[FULL PIPELINE SELECTED]"
-    RUN_SINGLE="true"
-    # Default params for full pipeline
-    LS_FLAG="--ls 1"
-    SL_FLAG="--sl 1"
+    echo -e "\n[SINGLE RUN SELECTED]"
+    if [[ -z "${SINGLE_FILE-}" ]]; then
+        RUN_SINGLE="true"
+    fi
 
 else
-    echo "Invalid option."
+    echo "Invalid Option."
     exit 1
 fi
 
-# --- BUILD STEP ---
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BUILD_DIR="$ROOT_DIR/build"
+# --- COMPILATION ---
+echo -e "\n[Building Project...]"
+mkdir -p build
+cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release
+make -j$(nproc)
+cd ..
+
+EXEC="./build/uflp"
+if [[ ! -f "$EXEC" ]]; then
+    echo "Error: Compilation failed. Executable not found."
+    exit 1
+fi
+
+# --- PATH CONFIG ---
+# Diretório onde as instâncias estão (ajuste se necessário)
 INSTANCES_DIR="instancias_MED"
-INSTANCES_ABS_PATH="$(realpath "$ROOT_DIR/$INSTANCES_DIR")"
-
-echo -e "\n>>> Building Project..."
-mkdir -p "$BUILD_DIR"
-cmake -S "$ROOT_DIR" -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release -Wno-dev
-cmake --build "$BUILD_DIR" -j"$(nproc || echo 1)"
-
-EXEC="$BUILD_DIR/uflp"
-if [[ ! -x "$EXEC" ]]; then
-    echo "Error: Executable not found at $EXEC"
-    exit 1
-fi
+INSTANCES_ABS_PATH="$(pwd)/$INSTANCES_DIR"
 
 # --- EXECUTION LOGIC ---
 
-# CASO 1: PAPER BENCHMARK (Novo)
-if [[ "$PAPER_BENCHMARK" == "true" ]]; then
-    SCRIPT_PY="$ROOT_DIR/src/analysis/run_paper_experiment.py"
-    
-    if [[ ! -f "$SCRIPT_PY" ]]; then
-        echo "Error: Experiment script not found at $SCRIPT_PY"
-        echo "Please create it using the Python code provided previously."
+# MODO ESTATÍSTICO (NOVO)
+if [[ "$STATS_FLAG" == "true" ]]; then
+    # Verifica se o script python existe
+    if [[ ! -f "src/analysis/plot_stats_30runs.py" ]]; then
+        echo "Error: Python script src/analysis/plot_stats_30runs.py not found!"
         exit 1
     fi
     
-    echo -e "\n>>> STARTING PAPER REPLICATION EXPERIMENT <<<"
-    echo "Executing Python script wrapper..."
-    echo "This may take a while as it runs for k=5, 10, and 20."
+    echo "Launching Python Statistical Controller..."
+    python3 src/analysis/plot_stats_30runs.py --run-cpp "$EXEC" --dir "$INSTANCES_ABS_PATH"
     
-    python3 "$SCRIPT_PY"
-    
-    echo -e "\nDone! Check 'results/paper_replication/' for Tables and Charts."
+    echo -e "\nCheck results in results/stats_plots/"
     exit 0
 fi
 
-# CASO 2: STRATEGY COMPARISON BATCH
+# MODO PAPER BENCHMARK
+if [[ "$PAPER_BENCHMARK" == "true" ]]; then
+    echo "Launching Python Experiment Controller..."
+    python3 src/analysis/run_paper_experiment.py
+    exit 0
+fi
+
+# MODO STRATEGY BATCH
 if [[ "$BATCH_STRATEGY" == "true" ]]; then
-    echo -e "\n>>> STARTING STRATEGY COMPARISON BATCH <<<"
-    
-    # 1. No LS, No SL
-    echo -e "\n[1/4] Running: GA Only | LS: OFF | SL: OFF"
-    "$EXEC" -all "$INSTANCES_ABS_PATH" --ga-only --ls 0 --sl 0
-
-    # 2. LS Only
-    echo -e "\n[2/4] Running: GA Only | LS: ON  | SL: OFF"
-    "$EXEC" -all "$INSTANCES_ABS_PATH" --ga-only --ls 1 --sl 0
-
-    # 3. SL Only
-    echo -e "\n[3/4] Running: GA Only | LS: OFF | SL: ON"
-    "$EXEC" -all "$INSTANCES_ABS_PATH" --ga-only --ls 0 --sl 1
-
-    # 4. Full
-    echo -e "\n[4/4] Running: GA Only | LS: ON  | SL: ON"
-    "$EXEC" -all "$INSTANCES_ABS_PATH" --ga-only --ls 1 --sl 1
-    
-    echo "Batch run complete."
+    echo "Launching Python Strategy Comparison..."
+    python3 src/analysis/compare_strategies.py
     exit 0
 fi
 
-# CASO 3: SINGLE / INTERACTIVE MODE
-if [[ "$RUN_SINGLE" == "true" ]]; then
-    # Se arquivo não foi passado via argumento, abre seletor
+# MODO INTERATIVO (SINGLE OU BATCH NA PASTA)
+if [[ "$RUN_SINGLE" == "true" || -n "${SINGLE_FILE-}" ]]; then
+    
     if [[ -z "${SINGLE_FILE-}" ]]; then
         if [[ ! -d "$INSTANCES_ABS_PATH" ]]; then
             echo "Error: Directory '$INSTANCES_DIR' not found."
@@ -177,6 +166,6 @@ if [[ "$RUN_SINGLE" == "true" ]]; then
     fi
 
     # Executa Única Instância
-    echo -e "\nRunning Solver on: $(basename "$SELECTED_FILE")"
+    echo -e "\nRunning Solver on $(basename "$SELECTED_FILE")..."
     "$EXEC" -i "$SELECTED_FILE" $GA_ONLY_FLAG $LS_FLAG $SL_FLAG
 fi

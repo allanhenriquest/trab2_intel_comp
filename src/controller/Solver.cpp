@@ -18,8 +18,12 @@ using namespace std;
 // List of files for Test Mode
 const vector<string> test_files = {
     "./instancias_MED/500-10.txt", "./instancias_MED/500-100.txt", "./instancias_MED/500-1000.txt",
+    "./instancias_MED/1000-10.txt", "./instancias_MED/1000-100.txt", "./instancias_MED/1000-1000.txt", // <--- Adicionado
     "./instancias_MED/1500-10.txt", "./instancias_MED/1500-100.txt", "./instancias_MED/1500-1000.txt",
-    "./instancias_MED/2500-10.txt", "./instancias_MED/2500-100.txt", "./instancias_MED/2500-1000.txt"};
+    "./instancias_MED/2000-10.txt", "./instancias_MED/2000-100.txt", "./instancias_MED/2000-1000.txt", // <--- Adicionado
+    "./instancias_MED/2500-10.txt", "./instancias_MED/2500-100.txt", "./instancias_MED/2500-1000.txt",
+    "./instancias_MED/3000-10.txt", "./instancias_MED/3000-100.txt", "./instancias_MED/3000-1000.txt"  // <--- Adicionado
+};
 
 PipelineResult Solver::solveInstance(const string &instance_path, const GAParams &ga_params,
                                      const SAParams &sa_params)
@@ -275,4 +279,88 @@ vector<Solution> Solver::solveStochastic(const Instance &instance, const SAParam
         run_id++;
     }
     return robust_pool;
+}
+
+void Solver::runStatisticalAnalysis(const string &dir_path, const GAParams &ga_params, const SAParams &sa_params, int runs)
+{
+    vector<string> files;
+    
+    // 1. Identificar arquivos (mesma lógica do solveAll)
+    try {
+        if (!fs::exists(dir_path)) return;
+        for (const auto &entry : fs::directory_iterator(dir_path)) {
+            if (entry.path().extension() == ".txt")
+                files.push_back(entry.path().string());
+        }
+    } catch (...) { return; }
+    sort(files.begin(), files.end());
+
+    // 2. Preparar Arquivo de Saída Unificado
+    string out_file = "results/stats_raw_30runs.csv";
+    Writer::ensureDirectory("results");
+    
+    // Cabeçalho para pós-processamento
+    // RunID: Identificador da rodada (0..29)
+    // Seed: Semente usada
+    // Gap: Diferença percentual para o BKS (Best Known Solution)
+    Writer::cleanUpFile(out_file);
+    Writer::appendCSV(out_file, 
+        "Instance,RunID,Seed,BKS,OBD_Cost,OBD_Time,OBS_Cost,OBS_Time,Gap_OBD(%),Gap_OBS(%)", "");
+
+    cout << ">>> STARTING STATISTICAL ANALYSIS (" << runs << " runs per instance) <<<" << endl;
+
+    // 3. Loop Principal
+    for (const string &file : files)
+    {
+        string instance_name = fs::path(file).stem().string();
+        long bks = (BEST.count(instance_name)) ? BEST.at(instance_name) : 0;
+
+        cout << "Processing " << instance_name << "... ";
+        
+        // Loop das 30 execuções
+        for (int r = 0; r < runs; ++r)
+        {
+            // Varia a semente para garantir independência estatística
+            // Usamos uma base + iteração para reprodutibilidade
+            unsigned long long current_seed = ga_params.seed + r * 12345;
+
+            GAParams local_ga = ga_params;
+            local_ga.seed = current_seed;
+            
+            SAParams local_sa = sa_params;
+            local_sa.seed = current_seed;
+
+            // Resolve a instância
+            PipelineResult res = solveInstance(file, local_ga, local_sa);
+
+            // Cálculos de Gap
+            double gap_obd = 0.0;
+            double gap_obs = 0.0;
+            if (bks > 0) {
+                gap_obd = (res.OBD.total_cost - bks) / (double)bks * 100.0;
+                gap_obs = (res.OBS.expected_cost - bks) / (double)bks * 100.0;
+            }
+
+            // Salva linha no CSV
+            stringstream row;
+            row << instance_name << ","
+                << r + 1 << ","
+                << current_seed << ","
+                << bks << ","
+                << res.OBD.total_cost << ","
+                << res.OBD_t << ","
+                << res.OBS.expected_cost << ","
+                << res.OBS_t << ","
+                << fixed << setprecision(4) << gap_obd << ","
+                << gap_obs;
+
+            Writer::appendCSV(out_file, "", row.str());
+            
+            // Feedback visual mínimo (pontinho para cada run)
+            cout << "." << flush;
+        }
+        cout << " Done." << endl;
+    }
+    
+    cout << "\n>>> Statistical Data Saved to: " << out_file << endl;
 }
