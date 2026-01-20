@@ -15,7 +15,7 @@
 namespace fs = std::filesystem;
 using namespace std;
 
-// List of files for Test Mode (Hardcoded for convenience)
+// List of files for Test Mode
 const vector<string> test_files = {
     "./instancias_MED/500-10.txt", "./instancias_MED/500-100.txt", "./instancias_MED/500-1000.txt",
     "./instancias_MED/1500-10.txt", "./instancias_MED/1500-100.txt", "./instancias_MED/1500-1000.txt",
@@ -25,15 +25,12 @@ PipelineResult Solver::solveInstance(const string &instance_path, const GAParams
                                      const SAParams &sa_params)
 {
     // 1. Load Instance
-    // verbose=true prints errors if parsing fails
     Instance instance(instance_path, true);
     
-    // Extract naming info for file structure and output paths
     fs::path p(instance.filePath);
     string instance_name = p.stem().string();
     string baseDir = "results/" + instance_name;
 
-    // Safety Check: Abort if instance is empty/invalid
     if (instance.n == 0)
     {
         cerr << "[CRITICAL ERROR] Instance failed to load (N=0). Aborting." << endl;
@@ -47,9 +44,8 @@ PipelineResult Solver::solveInstance(const string &instance_path, const GAParams
     PipelineResult result;
 
     // ====================================================
-    // STAGE 1: Deterministic GA (The "Robust" Solver)
+    // STAGE 1: Deterministic GA
     // ====================================================
-    // Runs the Genetic Algorithm to find the Best Deterministic Solution (OBD)
     auto ga_res = solveDeterministic(instance, ga_params);
     vector<Solution> &ga_pool = ga_res.first;
     GaRunMetrics &ga_metrics = ga_res.second;
@@ -58,35 +54,28 @@ PipelineResult Solver::solveInstance(const string &instance_path, const GAParams
 
     if (ga_pool.empty())
     {
-        // Fallback for catastrophic failure (should not happen with robust GA)
         result.OBD = Solution(instance.n, instance.m);
         result.OBS = Solution(instance.n, instance.m);
         result.OAS = 0.0;
         return result;
     }
 
-    // Set OBD (Best Deterministic) - Elite[0] is guaranteed to be best due to sorting in GA
+    // Set OBD
     result.OBD = ga_pool.front();
     
-    // Evaluate OBD under Uncertainty (Simulation)
-    // We use a HIGH number of samples (100,000) for accurate reporting of the OBD_S
+    // Evaluate OBD under Uncertainty (Simulation - High Precision)
     result.OBD.expected_cost = MonteCarlo::expectedCost(instance, result.OBD, result.OBD, 
                         100000, sa_params.mc_k, sa_params.seed);
     result.OBD_S = result.OBD.expected_cost;
 
-    // Save Stage 1 Result
-    if (!ga_pool.empty())
-    {
-        Writer::writeSolution(baseDir + "/solution_stage1_ga.txt", result.OBD, ga_params.seed);
-    }
+    Writer::writeSolution(baseDir + "/solution_stage1_ga.txt", result.OBD, ga_params.seed);
 
     // ====================================================
-    // STAGE 2: Stochastic SA (Refinement)
+    // STAGE 2: Stochastic SA
     // ====================================================
 
     if (!sa_params.solve)
     {
-        // If SA is disabled via flags, fill with dummy/deterministic values
         result.OBS = result.OBD; 
         result.OAS = result.OBD_S;
         result.OBS_t = 0.0;
@@ -97,45 +86,34 @@ PipelineResult Solver::solveInstance(const string &instance_path, const GAParams
         Timer sa_timer;
         sa_timer.start();
         
-        // Run SA starting from the GA pool.
-        // NOTE: The SA inside uses a LOW sample count (e.g., 100) for performance.
         vector<Solution> robust_pool = solveStochastic(instance, sa_params, ga_pool, result.OBD);
         
         sa_timer.stop();
         result.OBS_t = sa_timer.elapsedMs();
 
-        // CRITICAL STEP: Re-evaluate the robust pool with HIGH precision.
-        // The solutions returned by SA have expected_cost based on ~100 samples.
-        // We need 100,000 samples to reliably compare with OBD_S and report gaps.
+        // Final Validation (High Precision)
         #pragma omp parallel for
         for(size_t i=0; i<robust_pool.size(); ++i) {
              robust_pool[i].expected_cost = MonteCarlo::expectedCost(
                  instance, robust_pool[i], result.OBD, 
-                 100000, // Force high precision for final report
+                 100000, 
                  sa_params.mc_k, sa_params.seed
              );
         }
 
-        // Sort pool by the new, accurate Expected Cost to find the single best stochastic solution (OBS)
         sort(robust_pool.begin(), robust_pool.end(), [](const Solution &a, const Solution &b)
              { return a.expected_cost < b.expected_cost; });
 
         if(!robust_pool.empty()) {
-            Solution &best_sol = robust_pool.front();
-            result.OBS = best_sol;
-            
-            // Calculate Average Cost of the robust pool (OAS)
+            result.OBS = robust_pool.front();
             double sum = 0.0;
-            for (const auto &sol : robust_pool) {
-                sum += sol.expected_cost;
-            }
+            for (const auto &sol : robust_pool) sum += sol.expected_cost;
             result.OAS = sum / robust_pool.size();
             
             Writer::writeSolution(baseDir + "/solution_stage2_stoch_sa.txt", result.OBS, sa_params.seed);
         }
     }
 
-    // Save Parameters and Generate Charts (Python Integration)
     Writer::saveParameters(ga_params, sa_params, baseDir + "/parameters.txt");
     Writer::createChart(instance_name);
 
@@ -147,11 +125,10 @@ void Solver::solveAllInDirectory(const string &dir_path, const GAParams &ga_para
 {
     vector<string> files;
 
-    // 1. Gather Files
     if (ga_params.test_mode)
     {
         files = test_files;
-        cout << "Test mode enabled. Using predefined test files." << endl;
+        cout << "Test mode enabled." << endl;
     }
     else
     {
@@ -167,31 +144,26 @@ void Solver::solveAllInDirectory(const string &dir_path, const GAParams &ga_para
             }
         }
         catch (...) { return; }
-        
-        // Sort files naturally (alphanumeric sort would be better, but standard sort is fine)
         sort(files.begin(), files.end());
     }
     
     int total = files.size();
     cout << "Found " << total << " instances. Starting Pipeline..." << endl;
 
-    // 2. Prepare Global Summary CSV
     Writer::ensureDirectory("results");
-    Writer::cleanUpDirectory("results"); // Careful: this wipes previous results in 'results/' root
+    Writer::cleanUpDirectory("results"); 
     
-    // Write header only once
     Writer::appendCSV("results/summary.csv", 
         "Instance,Best,OBD,OBD_Gap(%),OBD_S,OBD_S_Gap(%),OBS,OBS_Gap(%),OBD_t(ms),OBS_t(ms)", "");
 
-    // 3. Batch Loop
     for (int i = 0; i < total; ++i)
     {
         string file = files[i];
         string instance_name = fs::path(file).stem().string();
 
-        // Simple Console Progress Bar
+        // Progress Bar
         float progress = (float)(i + 1) / total;
-        int barWidth = 40;
+        int barWidth = 30;
         cout << "\r[";
         int pos = barWidth * progress;
         for (int b = 0; b < barWidth; ++b) {
@@ -199,13 +171,23 @@ void Solver::solveAllInDirectory(const string &dir_path, const GAParams &ga_para
             else if (b == pos) cout << ">";
             else cout << " ";
         }
-        cout << "] " << int(progress * 100.0) << "% " << instance_name << "   ";
+        
+        // --- VISUAL FEEDBACK (TERMINAL) ---
+        // Aqui ainda não temos o resultado, então só imprimimos o nome
+        cout << "] " << int(progress * 100.0) << "% " << instance_name << " ";
         cout.flush();
 
-        // Solve Instance
+        // Executa
         PipelineResult result = solveInstance(file, ga_params, sa_params);
 
-        // Calculate Gaps vs Literature (if available)
+        // --- IMPRESSÃO FORMATADA DOS CUSTOS (Logo após calcular) ---
+        // Mostra números "limpos" no terminal para análise rápida
+        cout << fixed << setprecision(0); 
+        cout << "| OBD: " << result.OBD_S << " | OBS: " << result.OBS.expected_cost;
+        cout.unsetf(ios_base::fixed); // Restaura para não afetar outras coisas
+        cout.flush();
+
+        // --- SALVAMENTO NO CSV (Alta Precisão) ---
         stringstream row;
         long literature_result = 0;
         if(BEST.count(instance_name)) 
@@ -219,40 +201,36 @@ void Solver::solveAllInDirectory(const string &dir_path, const GAParams &ga_para
             OBS_gap = (result.OBS.expected_cost - literature_result) / (double)literature_result * 100.0;
         }
 
+        // CSV: Usa defaultfloat (ou precisão alta) para os Custos
+        // Usa fixed(2) apenas para os Gaps (porcentagens)
         row << instance_name << ","
             << literature_result << ","
             << result.OBD.total_cost << ","
             << fixed << setprecision(2) << OBD_gap << ","
-            << fixed << setprecision(2) << result.OBD_S << ","
+            << defaultfloat << result.OBD_S << ","         // <--- Custo bruto no CSV
             << fixed << setprecision(2) << OBD_S_gap << ","
-            << fixed << setprecision(2) << result.OBS.expected_cost << ","
+            << defaultfloat << result.OBS.expected_cost << "," // <--- Custo bruto no CSV
             << fixed << setprecision(2) << OBS_gap << ","
-            << fixed << setprecision(2) << result.OBD_t << ","
-            << fixed << setprecision(2) << result.OBS_t;
+            << defaultfloat << result.OBD_t << ","
+            << result.OBS_t;
             
         Writer::appendCSV("results/summary.csv", "", row.str());
     }
-    cout << endl << "Batch run complete. Check 'results/summary.csv'." << endl;
+    cout << endl << "Batch run complete." << endl;
 }
 
 pair<vector<Solution>, GaRunMetrics> Solver::solveDeterministic(const Instance &instance, const GAParams &ga_params)
 {
-    // Executes the GA (Robust Version)
     GA ga(ga_params, instance);
     auto ga_res = ga.run(instance);
     vector<Solution> &solutions = ga_res.first;
     GaRunMetrics &metrics = ga_res.second;
 
-    // Prepare Directory for instance
     fs::path p(metrics.instance_name);
     string baseDir = "results/" + p.stem().string();
     Writer::ensureDirectory(baseDir);
-
-    // Write Detailed History (Critical for Charts)
-    // We overwrite history_ga.csv to ensure clean data for charts
     Writer::cleanUpFile(baseDir + "/history_ga.csv");
 
-    // We iterate through history to save diversity metrics (StdDev, UniqueRatio)
     for (const auto &gen : metrics.history)
     {
         stringstream row;
@@ -263,7 +241,6 @@ pair<vector<Solution>, GaRunMetrics> Solver::solveDeterministic(const Instance &
             << gen.ls_improvements << "," 
             << gen.avg_open_facilities << "," 
             << gen.duplicates << "," 
-            // Save Robust Metrics for Python analysis
             << gen.cost_std_dev << "," 
             << gen.unique_ratio;
             
@@ -280,27 +257,21 @@ vector<Solution> Solver::solveStochastic(const Instance &instance, const SAParam
     SA sa(sa_params);
     vector<Solution> robust_pool;
 
-    CostEstimator stoch_estimator = [&](const Instance &inst, const Solution &sol) -> double
+    CostEstimator stoch_estimator = [&](const Instance &inst, const Solution &sol, int samples) -> double
     {
         return MonteCarlo::expectedCost(inst, sol, best_deter_sol, 
-                                        sa_params.mc_samples, sa_params.mc_k, sa_params.seed);
+                                        samples, sa_params.mc_k, sa_params.seed);
     };
-    
-    // Obter nome da instância para o Writer
+
     fs::path p(instance.filePath);
     string instance_name = p.stem().string();
 
     int run_id = 0;
     for (const auto &sol : initialPool)
     {
-        // Chama refine e pega o par {Solução, Histórico}
         auto result_pair = sa.refine(instance, sol, stoch_estimator);
-        
         robust_pool.push_back(result_pair.first);
-        
-        // Salva o histórico desta execução específica
         Writer::saveSaStats(instance_name, run_id, result_pair.second);
-        
         run_id++;
     }
     return robust_pool;

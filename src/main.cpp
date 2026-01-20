@@ -2,6 +2,7 @@
 #include <string>
 #include <vector>
 #include <filesystem>
+#include <iomanip> // Necessário para setprecision
 #include "io/Instance.h"
 #include "controller/Solver.h"
 #include "util/Metrics.h"
@@ -17,8 +18,9 @@ void printUsage() {
               << "  --ls <0/1>       Enable/Disable Local Search (Default: 1)\n"
               << "  --sl <0/1>       Enable/Disable Smart Leader (Default: 1)\n"
               << "  --seed <int>     Set fixed seed (Default: 42)\n"
-              << "  --samples <int>  Monte Carlo samples for SA (Default: 100)\n"
-              << "  --gen <int>      Max GA Generations (Default: 300)\n";
+              << "  --samples <int>  Monte Carlo samples for SA search (Default: 100)\n"
+              << "  --gen <int>      Max GA Generations (Default: 300)\n"
+              << "  --k <int>        Uncertainty Factor k (5=Low, 10=Med, 20=High) [Default: 5]\n";
 }
 
 int main(int argc, char* argv[]) {
@@ -33,7 +35,8 @@ int main(int argc, char* argv[]) {
     // Base defaults
     ga_params.seed = 42;
     sa_params.seed = 42;
-    sa_params.mc_samples = 100; // Amostras reduzidas para o SA rodar rápido
+    sa_params.mc_samples = 100; 
+    sa_params.mc_k = 5;         
 
     // Parse Args
     for (int i = 1; i < argc; ++i) {
@@ -64,6 +67,9 @@ int main(int argc, char* argv[]) {
         else if (arg == "--gen" && i + 1 < argc) {
             ga_params.max_generations = std::stoi(argv[++i]);
         }
+        else if (arg == "--k" && i + 1 < argc) {
+            sa_params.mc_k = std::stoi(argv[++i]); 
+        }
         else if (arg == "--help" || arg == "-h") {
             printUsage();
             return 0;
@@ -79,14 +85,21 @@ int main(int argc, char* argv[]) {
         }
         solver.solveAllInDirectory(instances_dir, ga_params, sa_params);
     } else if (!instance_path.empty()) {
-        std::cout << ">>> Processing Single Instance: " << instance_path << std::endl;
+        std::cout << ">>> Processing Single Instance: " << instance_path << " (k=" << sa_params.mc_k << ")" << std::endl;
         PipelineResult res = solver.solveInstance(instance_path, ga_params, sa_params);
         
         std::cout << "Final Results:\n";
-        std::cout << "  OBD (Deterministic): " << res.OBD.total_cost << "\n";
-        std::cout << "  OBD Expected:        " << res.OBD_S << "\n";
+        
+        // --- FORMATAÇÃO VISUAL PARA TERMINAL (Truncado/Inteiro) ---
+        std::cout << std::fixed << std::setprecision(0); // Sem casas decimais, sem notação científica
+        
+        std::cout << "  OBD (Deterministic): " << (double)res.OBD.total_cost << "\n";
+        std::cout << "  OBD Expected (k=" << sa_params.mc_k << "): " << res.OBD_S << "\n";
         if(sa_params.solve)
-            std::cout << "  OBS (Stochastic):    " << res.OBS.expected_cost << "\n";
+            std::cout << "  OBS (Stochastic, k=" << sa_params.mc_k << "): " << res.OBS.expected_cost << "\n";
+            
+        // Restaura padrão (opcional)
+        std::cout.unsetf(std::ios_base::fixed);
             
     } else {
         printUsage();
