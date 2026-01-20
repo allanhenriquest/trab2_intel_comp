@@ -12,57 +12,43 @@ using namespace std;
 double MonteCarlo::expectedCost(const Instance &inst, const Solution &sol,
                                 const Solution &best_deter_sol, int samples, int k, unsigned long long seed)
 {
-    // 1. Custo Fixo Determinístico (Não muda com a incerteza)
+    // 1. Custo Fixo (Apenas instalações abertas na solução atual)
     double fixed_cost = 0.0;
-    for (int i = 0; i < inst.n; ++i)
-    {
+    for (int i = 0; i < inst.n; ++i) {
         if (sol.openFacilities[i])
             fixed_cost += inst.opening_costs[i];
     }
 
-    if (fixed_cost == 0.0)
-        return 1e15; // Penalidade máxima se nenhuma fábrica estiver aberta
+    if (fixed_cost == 0.0) return 1e15; // Penalidade se vazio
 
-    // 2. Calcular Threshold (c_max) baseado na Solução Determinística (OBD)
-    // CORREÇÃO: Usar o Percentil 95 em vez do Máximo Absoluto.
-    // O Máximo Absoluto é muito "frouxo" (se houver um outlier de custo alto na OBD, 
-    // ele eleva o teto para todos, impedindo penalidades).
-    // O Percentil 95 força que a cauda da distribuição sofra penalidades.
+    // ==============================================================================
+    // COMPATIBILIDADE COM ARTIGO (Peidro et al., 2024): DEFINIÇÃO DE THRESHOLD
+    // O c_max é o MAIOR custo de alocação presente na Melhor Solução Determinística (OBD).
+    // Não usamos percentis. Se a OBD aceita pagar X por um cliente, X é o nosso teto.
+    // ==============================================================================
     double c_max = 0.0;
     
+    // Varre todas as alocações da OBD para achar o pior caso (Max c_ij)
     if (!best_deter_sol.assigned_facility.empty()) {
-        vector<double> costs;
-        costs.reserve(inst.m);
         for(const auto& p : best_deter_sol.assigned_facility) {
-            costs.push_back(static_cast<double>(p.second));
+            double cost = static_cast<double>(p.second);
+            if (cost > c_max) c_max = cost;
         }
-        
-        // Ordena para achar o percentil
-        sort(costs.begin(), costs.end());
-        
-        // Pega o valor que cobre 95% dos casos. Os 5% piores da OBD já estão "no limite".
-        // Qualquer variação estocástica neles vai estourar o c_max e gerar multa.
-        int idx = static_cast<int>(costs.size() * 0.95);
-        if(idx >= costs.size()) idx = costs.size() - 1;
-        c_max = costs[idx];
-        
     } else {
-        // Fallback
-        c_max = 0.0; 
-        for(auto assigned : sol.assigned_facility) {
-             if(assigned.second > c_max) c_max = assigned.second;
-        }
+        // Fallback seguro se OBD estiver vazia (não deve acontecer)
+        c_max = std::numeric_limits<double>::max(); 
     }
     
-    // Garante um mínimo técnico para evitar c_max = 0
-    if(c_max < 1.0) c_max = 1.0;
+    // Evita c_max zero em casos degenerados
+    if(c_max < 1.0) c_max = 1.0; 
 
-    // 3. Simulação Estocástica (Custos de Serviço)
+    // 2. Simulação Estocástica
     double total_service_cost = 0.0;
-    double var_factor = static_cast<double>(k);
+    double var_factor = static_cast<double>(k); // k=5, 10, 20 define a variância
 
     #pragma omp parallel reduction(+ : total_service_cost)
     {
+        // RNG thread-safe
         Random local_rng(seed + omp_get_thread_num());
 
         #pragma omp for
@@ -70,38 +56,28 @@ double MonteCarlo::expectedCost(const Instance &inst, const Solution &sol,
         {
             double scenario_cost = 0.0;
 
-            for (int j = 0; j < inst.m; ++j)
+            for (int j = 0; j < inst.m; ++j) // Para cada cliente j
             {
-                // Dados da solução atual (candidata)
-                int assigned_facility_idx = sol.assigned_facility[j].first;
-                double expected_cost = sol.assigned_facility[j].second;
+                // Dados da solução CANDIDATA (que estamos avaliando)
+                int facility_idx = sol.assigned_facility[j].first;
+                double mean_cost = sol.assigned_facility[j].second;
 
-                if(expected_cost <= 0.0)
-                    continue;
+                if(mean_cost <= 0.0) continue;
 
-                // Modelo Log-Normal
-                // Variance = k * Mean (Modelo Linear padrão da literatura)
-                double variance = var_factor * expected_cost; 
-                
-                double stoch_c = local_rng.lognormal(expected_cost, variance);
+                // Modelo Log-Normal (Variância = k * Média)
+                double variance = var_factor * mean_cost; 
+                double stoch_c = local_rng.lognormal(mean_cost, variance);
 
-                // Aplica Penalidade baseada no c_max da OBD
-                if (stoch_c < numeric_limits<double>::infinity())
-                {
-                    if (stoch_c > c_max)
-                    {
-                        // Penalidade Severa: Custo Real + 2x Custo de Abertura
-                        // Isso garante que Stoch > Deterministic quando há violações
-                        scenario_cost += stoch_c + (0.315 * inst.opening_costs[assigned_facility_idx]);
-                    }
-                    else
-                    {
-                        scenario_cost += stoch_c;
-                    }
-                }
-                else
-                {
-                    scenario_cost += 1e9; // Segurança numérica
+                // ==========================================================================
+                // COMPATIBILIDADE COM ARTIGO: REGRA DE PENALIDADE
+                // Se o custo estocástico exceder c_max (da OBD), aplica-se penalidade.
+                // Penalidade = Custo Estocástico + 2 * Custo de Abertura da Instalação
+                // Fonte: Seção 5.3 do artigo ("twice the cost of opening a facility")
+                // ==========================================================================
+                if (stoch_c > c_max) {
+                    scenario_cost += stoch_c + (2.0 * inst.opening_costs[facility_idx]);
+                } else {
+                    scenario_cost += stoch_c;
                 }
             }
             total_service_cost += scenario_cost;
