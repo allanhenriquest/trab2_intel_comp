@@ -22,10 +22,8 @@ Instance::Instance(const string& path, bool verbose) : filePath(path) {
     if (token == "FILE:") {
         string filename_dummy;
         in >> filename_dummy;
-        // Now read N
         in >> n;
     } else {
-        // It was a number (N), so parse it
         try {
             n = stoi(token);
         } catch (...) {
@@ -34,7 +32,6 @@ Instance::Instance(const string& path, bool verbose) : filePath(path) {
         }
     }
 
-    // Read M and Dummy
     int dummy;
     in >> m >> dummy;
 
@@ -44,12 +41,11 @@ Instance::Instance(const string& path, bool verbose) : filePath(path) {
         return;
     }
 
-    // Resize vectors
     opening_costs.resize(n);
     allocation_costs.resize(n, vector<long>(m));
 
     // Parse loop
-    // Format: [FacilityIndex] [OpeningCost] [CostToClient1] ...
+    // Format: [FacilityIndex] [OpeningCost] [CostToClient1] [costToClient2] ...
     for (int i = 0; i < n; ++i) {
         int index;
         if (!(in >> index >> opening_costs[i])) {

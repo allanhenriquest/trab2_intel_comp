@@ -5,7 +5,6 @@
 Solution::Solution() : total_cost(0), expected_cost(0.0), 
                         num_open_facilities(0), hash(0) {}
 
-// UPDATED: Now takes n (facilities) and m (clients)
 Solution::Solution(int n, int m) : total_cost(0.0), expected_cost(0.0), 
                                     num_open_facilities(0), hash(0) {
     openFacilities.assign(n, false);

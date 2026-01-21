@@ -28,14 +28,12 @@ int main(int argc, char* argv[]) {
     std::string instance_path;
     std::string instances_dir;
     bool run_all = false;
-    bool run_stats = false; // NOVA FLAG
-    int stats_runs = 30;    // Padrão de 30 execuções
+    bool run_stats = false;
+    int stats_runs = 30;
     
-    // Default Parameters
     GAParams ga_params;
     SAParams sa_params;
     
-    // Base defaults
     ga_params.seed = 42;
     sa_params.seed = 42;
     sa_params.mc_samples = 100; 
@@ -51,7 +49,7 @@ int main(int argc, char* argv[]) {
             run_all = true;
             instances_dir = argv[++i];
         } 
-        else if (arg == "--stats") { // NOVA OPÇÃO
+        else if (arg == "--stats") {
             run_stats = true;
             run_all = true; // Stats implica rodar num diretório
         }
@@ -91,7 +89,6 @@ int main(int argc, char* argv[]) {
         // MODO ESTATÍSTICO (30 Runs)
         if (instances_dir.empty()) {
             // Se o usuário não passou -all <dir> antes de --stats, tenta assumir default ou erro
-            // O ideal é passar: ./uflp -all instancias_MED --stats
              if (!fs::exists(instances_dir)) {
                 std::cerr << "Error: Directory needed for stats mode. Use: -all <dir> --stats" << std::endl;
                 return 1;
@@ -103,11 +100,9 @@ int main(int argc, char* argv[]) {
             return 1;
         }
         
-        // Chama o novo método estatístico
         solver.runStatisticalAnalysis(instances_dir, ga_params, sa_params, stats_runs);
     } 
     else if (run_all) {
-        // MODO BATCH NORMAL (1 Run)
         if (!fs::exists(instances_dir)) {
             std::cerr << "Error: Directory not found: " << instances_dir << std::endl;
             return 1;
@@ -121,7 +116,6 @@ int main(int argc, char* argv[]) {
         
         std::cout << "Final Results:\n";
         
-        // Formatação visual
         std::cout << std::fixed << std::setprecision(0); 
         
         std::cout << "  OBD (Deterministic): " << (double)res.OBD.total_cost << "\n";

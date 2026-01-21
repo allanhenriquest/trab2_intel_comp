@@ -28,7 +28,7 @@ const vector<string> test_files = {
 PipelineResult Solver::solveInstance(const string &instance_path, const GAParams &ga_params,
                                      const SAParams &sa_params)
 {
-    // 1. Load Instance
+    // Load Instance
     Instance instance(instance_path, true);
     
     fs::path p(instance.filePath);
@@ -155,7 +155,6 @@ void Solver::solveAllInDirectory(const string &dir_path, const GAParams &ga_para
     cout << "Found " << total << " instances. Starting Pipeline..." << endl;
 
     Writer::ensureDirectory("results");
-    Writer::cleanUpDirectory("results"); 
     
     Writer::appendCSV("results/summary.csv", 
         "Instance,Best,OBD,OBD_Gap(%),OBD_S,OBD_S_Gap(%),OBS,OBS_Gap(%),OBD_t(ms),OBS_t(ms)", "");
@@ -176,15 +175,12 @@ void Solver::solveAllInDirectory(const string &dir_path, const GAParams &ga_para
             else cout << " ";
         }
         
-        // --- VISUAL FEEDBACK (TERMINAL) ---
-        // Aqui ainda não temos o resultado, então só imprimimos o nome
         cout << "] " << int(progress * 100.0) << "% " << instance_name << " ";
         cout.flush();
 
         // Executa
         PipelineResult result = solveInstance(file, ga_params, sa_params);
 
-        // --- IMPRESSÃO FORMATADA DOS CUSTOS (Logo após calcular) ---
         // Mostra números "limpos" no terminal para análise rápida
         cout << fixed << setprecision(0); 
         cout << "| OBD: " << result.OBD_S << " | OBS: " << result.OBS.expected_cost;
@@ -211,9 +207,9 @@ void Solver::solveAllInDirectory(const string &dir_path, const GAParams &ga_para
             << literature_result << ","
             << result.OBD.total_cost << ","
             << fixed << setprecision(2) << OBD_gap << ","
-            << defaultfloat << result.OBD_S << ","         // <--- Custo bruto no CSV
+            << defaultfloat << result.OBD_S << ","
             << fixed << setprecision(2) << OBD_S_gap << ","
-            << defaultfloat << result.OBS.expected_cost << "," // <--- Custo bruto no CSV
+            << defaultfloat << result.OBS.expected_cost << ","
             << fixed << setprecision(2) << OBS_gap << ","
             << defaultfloat << result.OBD_t << ","
             << result.OBS_t;
@@ -285,7 +281,6 @@ void Solver::runStatisticalAnalysis(const string &dir_path, const GAParams &ga_p
 {
     vector<string> files;
     
-    // 1. Identificar arquivos no diretório
     try {
         if (!fs::exists(dir_path)) return;
         for (const auto &entry : fs::directory_iterator(dir_path)) {
@@ -294,38 +289,32 @@ void Solver::runStatisticalAnalysis(const string &dir_path, const GAParams &ga_p
         }
     } catch (...) { return; }
     
-    // Ordenar para garantir consistência na execução
     sort(files.begin(), files.end());
 
-    // 2. Preparar Arquivo de Saída Unificado
-    // O arquivo é limpo no início para não misturar experimentos antigos
+    // Arquivo de Saída Unificado
     string out_file = "results/stats_raw_30runs.csv";
     Writer::ensureDirectory("results");
     
     Writer::cleanUpFile(out_file);
-    
-    // CABEÇALHO ATUALIZADO COM A COLUNA 'k'
+
     Writer::appendCSV(out_file, 
         "Instance,RunID,Seed,k,BKS,OBD_Cost,OBD_Time,OBS_Cost,OBS_Time,Gap_OBD(%),Gap_OBS(%)", "");
 
     cout << ">>> STARTING STATISTICAL ANALYSIS (" << runs << " runs per instance, k=" << sa_params.mc_k << ") <<<" << endl;
 
-    // 3. Loop Principal (Instâncias)
+    // Loop Principal (Instâncias)
     for (const string &file : files)
     {
         string instance_name = fs::path(file).stem().string();
         
-        // Tenta obter o BKS (Best Known Solution) do mapa global/estático BEST
-        // Se não existir, assume 0 (o que vai gerar gap 0.0 ou infinito, tratado abaixo)
         long bks = (BEST.count(instance_name)) ? BEST.at(instance_name) : 0;
 
         cout << "Processing " << instance_name << " ";
         
-        // 4. Loop Estatístico (30 Execuções)
+        // Loop Estatístico (30 Execuções)
         for (int r = 0; r < runs; ++r)
         {
             // Varia a semente para garantir independência estatística
-            // A base é a seed passada por parâmetro + deslocamento por iteração
             unsigned long long current_seed = ga_params.seed + r * 12345;
 
             // Cria cópias locais dos parâmetros para não afetar as próximas iterações
@@ -335,33 +324,27 @@ void Solver::runStatisticalAnalysis(const string &dir_path, const GAParams &ga_p
             SAParams local_sa = sa_params;
             local_sa.seed = current_seed;
 
-            // Resolve a instância (GA + SA)
             PipelineResult res = solveInstance(file, local_ga, local_sa);
 
-            // Cálculos de Gap
             double gap_obd = 0.0;
             double gap_obs = 0.0;
             
             if (bks > 0) {
-                // Gap Determinístico: (Custo GA - BKS) / BKS
                 gap_obd = (res.OBD.total_cost - bks) / (double)bks * 100.0;
                 
-                // Gap Estocástico: (Custo Esperado SA - BKS) / BKS
-                // Lembre-se: Gap positivo é esperado pois incerteza custa caro
                 gap_obs = (res.OBS.expected_cost - bks) / (double)bks * 100.0;
             }
 
-            // Monta a linha do CSV
             stringstream row;
             row << instance_name << ","
-                << r + 1 << ","               // RunID (1..30)
-                << current_seed << ","        // Seed usada
-                << local_sa.mc_k << ","       // Nível de incerteza k
-                << bks << ","                 // Melhor conhecido
-                << res.OBD.total_cost << ","  // Melhor Determinístico (GA)
-                << res.OBD_t << ","           // Tempo GA
-                << res.OBS.expected_cost << "," // Melhor Estocástico (SA)
-                << res.OBS_t << ","           // Tempo SA
+                << r + 1 << ","
+                << current_seed << ","
+                << local_sa.mc_k << ","
+                << bks << ","
+                << res.OBD.total_cost << ","
+                << res.OBD_t << ","
+                << res.OBS.expected_cost << ","
+                << res.OBS_t << ","
                 << fixed << setprecision(4) << gap_obd << ","
                 << gap_obs;
 

@@ -17,22 +17,6 @@ void Writer::ensureDirectory(const string& path) {
     }
 }
 
-void Writer::cleanUpDirectory(const string& path) {
-    if (fs::exists(path)) {
-        // Remove apenas o arquivo de sumário global para evitar duplicatas,
-        // ou limpa tudo se for um diretório de instância específica.
-        // Por segurança, vamos apenas remover se for o summary.csv ou history.
-        // Implementação genérica segura:
-        try {
-            for (const auto& entry : fs::directory_iterator(path)) {
-                // Não removemos subdiretórios recursivamente aqui para segurança,
-                // apenas arquivos soltos se necessário, ou deixe vazio se preferir controlar manualmente.
-                // Mas o Solver.cpp pede cleanUpDirectory("results") para limpar o summary.csv antigo.
-            }
-        } catch (...) {}
-    }
-}
-
 void Writer::cleanUpFile(const string& path) {
     if (fs::exists(path)) {
         try {
@@ -104,17 +88,9 @@ void Writer::saveParameters(const GAParams& ga, const SAParams& sa, const string
 }
 
 void Writer::createChart(const string& instance_name) {
-    // Chama o script python via system call
-    // Garanta que python3 está no path e o script existe
     string cmd = "python3 src/analysis/generateCharts.py " + instance_name;
     int res = system(cmd.c_str());
     (void)res; // Silencia warning de variável não usada
-}
-
-// Implementação legada/compatibilidade se necessária
-void Writer::saveGaStats(const std::string& instance_name, const GaRunMetrics& metrics, const std::string& subfolder) {
-    // Redireciona para a nova lógica baseada em Instance Name se necessário
-    // Mas como o Solver.cpp já faz a iteração manual, esta função pode ficar vazia ou ser removida no futuro.
 }
 
 void Writer::saveSaStats(const std::string& instance_name, int run_id, const std::vector<SaStep>& history) {

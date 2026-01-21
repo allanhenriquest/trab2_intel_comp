@@ -17,5 +17,6 @@ public:
     // Close facility k; reassign affected clients and update total cost in O(n).
     static void closeFacility(int k, const Instance& inst, Solution& sol);
 
+    // Compute cost delta of flipping facility k status in current solution.
     static long delta(int facility, const Instance& inst, const Solution& sol);
 };

@@ -9,8 +9,7 @@ public:
     // Garante que o diretório exista (cria se não existir)
     static void ensureDirectory(const std::string& path);
 
-    // Limpa um diretório específico ou arquivo
-    static void cleanUpDirectory(const std::string& path);
+    // Limpa um arquivo específico
     static void cleanUpFile(const std::string& path);
     
     // Escreve uma solução completa em arquivo (Formato legível)
@@ -24,9 +23,6 @@ public:
     
     // Chama o script Python para gerar gráficos automaticamente
     static void createChart(const std::string& instance_name);
-    
-    // Mantido para compatibilidade (se ainda for usado em algum lugar)
-    static void saveGaStats(const std::string& instance_name, const GaRunMetrics& metrics, const std::string& subfolder = "");
 
     static void saveSaStats(const std::string& instance_name, int run_id, const std::vector<SaStep>& history);
 };

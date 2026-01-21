@@ -12,7 +12,6 @@ using namespace std;
 double MonteCarlo::expectedCost(const Instance &inst, const Solution &sol,
                                 const Solution &best_deter_sol, int samples, int k, unsigned long long seed)
 {
-    // 1. Custo Fixo (Apenas instalações abertas na solução atual)
     double fixed_cost = 0.0;
     for (int i = 0; i < inst.n; ++i) {
         if (sol.openFacilities[i])
@@ -21,11 +20,8 @@ double MonteCarlo::expectedCost(const Instance &inst, const Solution &sol,
 
     if (fixed_cost == 0.0) return 1e15; // Penalidade se vazio
 
-    // ==============================================================================
     // COMPATIBILIDADE COM ARTIGO (Peidro et al., 2024): DEFINIÇÃO DE THRESHOLD
     // O c_max é o MAIOR custo de alocação presente na Melhor Solução Determinística (OBD).
-    // Não usamos percentis. Se a OBD aceita pagar X por um cliente, X é o nosso teto.
-    // ==============================================================================
     double c_max = 0.0;
     
     // Varre todas as alocações da OBD para achar o pior caso (Max c_ij)
@@ -42,23 +38,20 @@ double MonteCarlo::expectedCost(const Instance &inst, const Solution &sol,
     // Evita c_max zero em casos degenerados
     if(c_max < 1.0) c_max = 1.0; 
 
-    // 2. Simulação Estocástica
     double total_service_cost = 0.0;
     double var_factor = static_cast<double>(k); // k=5, 10, 20 define a variância
 
     #pragma omp parallel reduction(+ : total_service_cost)
     {
-        // RNG thread-safe
         Random local_rng(seed + omp_get_thread_num());
 
         #pragma omp for
-        for (int s = 0; s < samples; ++s)
+        for (int scenario = 0; scenario < samples; ++scenario)
         {
             double scenario_cost = 0.0;
 
-            for (int j = 0; j < inst.m; ++j) // Para cada cliente j
+            for (int j = 0; j < inst.m; ++j)
             {
-                // Dados da solução CANDIDATA (que estamos avaliando)
                 int facility_idx = sol.assigned_facility[j].first;
                 double mean_cost = sol.assigned_facility[j].second;
 
@@ -68,12 +61,8 @@ double MonteCarlo::expectedCost(const Instance &inst, const Solution &sol,
                 double variance = var_factor * mean_cost; 
                 double stoch_c = local_rng.lognormal(mean_cost, variance);
 
-                // ==========================================================================
                 // COMPATIBILIDADE COM ARTIGO: REGRA DE PENALIDADE
                 // Se o custo estocástico exceder c_max (da OBD), aplica-se penalidade.
-                // Penalidade = Custo Estocástico + 2 * Custo de Abertura da Instalação
-                // Fonte: Seção 5.3 do artigo ("twice the cost of opening a facility")
-                // ==========================================================================
                 if (stoch_c > c_max) {
                     scenario_cost += stoch_c + (2.0 * inst.opening_costs[facility_idx]);
                 } else {
